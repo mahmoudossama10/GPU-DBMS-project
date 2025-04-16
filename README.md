@@ -8,3 +8,8 @@ Include the SQLParser.h from src/ (or from /usr/local/lib/hsql/ if you installed
 
 for the main
 g++ main.cpp -o main -I/sql-parser-main/src -L/sql-parser-main/build -lsqlparser
+make 
+make run
+load employees ./data/input/employees.csv 
+
+select * from employees

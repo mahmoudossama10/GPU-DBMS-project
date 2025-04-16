@@ -1,0 +1,64 @@
+SQLQueryProcessor/
+├── CMakeLists.txt
+├── run.sh
+├── data/
+│   ├── input_csvs/
+│   │   ├── Students.csv
+│   │   └── Addresses.csv
+│   └── outputs/
+│       ├── csv/
+│       └── txt/
+├── include/
+│   ├── DataHandling/
+│   │   ├── Table.hpp
+│   │   ├── CSVProcessor.hpp
+│   │   └── StorageManager.hpp
+│   ├── Operations/
+│   │   ├── Select.hpp
+│   │   ├── Project.hpp
+│   │   ├── Join.hpp
+│   │   ├── Filter.hpp
+│   │   ├── OrderBy.hpp
+│   │   └── Aggregator.hpp
+│   ├── QueryProcessing/
+│   │   ├── QueryExecutor.hpp
+│   │   ├── ASTProcessor.hpp
+│   │   ├── SubqueryHandler.hpp
+│   │   └── PlanBuilder.hpp
+│   ├── CLI/
+│   │   ├── CommandLineInterface.hpp
+│   │   ├── InputParser.hpp
+│   │   └── ResultDisplayer.hpp
+│   └── Utilities/
+│       ├── StringUtils.hpp
+│       ├── ErrorHandling.hpp
+│       └── Logger.hpp
+└── src/
+    ├── main.cpp
+    ├── DataHandling/
+    │   ├── Table.cpp
+    │   ├── CSVProcessor.cpp
+    │   └── StorageManager.cpp
+    ├── Operations/
+    │   ├── Select.cpp
+    │   ├── Project.cpp
+    │   ├── Join.cpp
+    │   ├── Filter.cpp
+    │   ├── OrderBy.cpp
+    │   └── Aggregator.cpp
+    ├── QueryProcessing/
+    │   ├── QueryExecutor.cpp
+    │   ├── ASTProcessor.cpp
+    │   ├── SubqueryHandler.cpp
+    │   └── PlanBuilder.cpp
+    ├── CLI/
+    │   ├── CommandLineInterface.cpp
+    │   ├── InputParser.cpp
+    │   └── ResultDisplayer.cpp
+    └── Utilities/
+        ├── StringUtils.cpp
+        ├── ErrorHandling.cpp
+        └── Logger.cpp
+├── libs/
+│   └── SQLParser/      # Assuming you'll use a library like antlr4 for parsing
+└── tests/              # (Optional) For unit tests
