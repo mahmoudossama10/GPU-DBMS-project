@@ -1,5 +1,6 @@
 #pragma once
 #include <hsql/SQLParser.h>
+
 #include "../DataHandling/Table.hpp"
 #include "../QueryProcessing/PlanBuilder.hpp"
 

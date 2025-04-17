@@ -8,9 +8,59 @@
 #include <algorithm> // for to_lower
 #include <cmath>     // for NaN
 #include <regex>
+#include <hsql/util/sqlhelper.h>
 
 namespace
 {
+
+    void printExpr(const hsql::Expr *expr)
+    {
+        if (expr == nullptr)
+        {
+            std::cout << "Expression is null\n";
+            return;
+        }
+
+        switch (expr->type)
+        {
+        case hsql::kExprOperator:
+        {
+            std::cout << "Operator Expression: ";
+
+            if (expr->expr)
+            {
+                printExpr(expr->expr); // left
+            }
+            if (expr->expr2)
+            {
+                std::cout << " ";
+                printExpr(expr->expr2); // right
+            }
+            break;
+        }
+
+        case hsql::kExprColumnRef:
+            std::cout << "Column: " << expr->name << "\n";
+            break;
+
+        case hsql::kExprLiteralString:
+            std::cout << "String Literal: \"" << expr->name << "\"\n";
+            break;
+
+        case hsql::kExprLiteralInt:
+            std::cout << "Int Literal: " << expr->ival << "\n";
+            break;
+
+        case hsql::kExprLiteralFloat:
+            std::cout << "Float Literal: " << expr->fval << "\n";
+            break;
+
+        default:
+            std::cout << "Unhandled expression type: " << expr->type << "\n";
+            break;
+        }
+    }
+
     std::unordered_map<std::string, size_t> createColumnIndexMap(
         const std::vector<std::string> &headers)
     {
@@ -40,6 +90,7 @@ std::shared_ptr<Table> Filter::apply(
     std::shared_ptr<Table> table,
     const hsql::Expr *condition)
 {
+    // hsql::printExpression(const_cast<hsql::Expr *>(condition), 5);
     if (!condition)
     {
         throw SemanticError("Null condition in filter");

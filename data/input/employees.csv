@@ -1,6 +1,6 @@
-emp_id_P,name,#dept_id_id
-1,Alice,101
-2,Bob,102
-3,Charlie,101
-4,David,103
-5,Eve,102
+emp_id_P,name,#dept_id_id,age
+1,Alice,101,20
+2,Bob,102,25
+3,Charlie,101,30
+4,David,103,35
+5,Eve,102,22
