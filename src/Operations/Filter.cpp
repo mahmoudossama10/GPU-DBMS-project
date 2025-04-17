@@ -28,6 +28,14 @@ namespace
         return (iss >> num) && iss.eof();
     }
 }
+
+std::shared_ptr<Table> FilterPlan::execute()
+{
+
+    auto table = input_->execute();
+    return Filter::apply(table, condition_);
+}
+
 std::shared_ptr<Table> Filter::apply(
     std::shared_ptr<Table> table,
     const hsql::Expr *condition)

@@ -1,6 +1,21 @@
 #pragma once
 #include <hsql/SQLParser.h>
 #include "../DataHandling/Table.hpp"
+#include "../QueryProcessing/PlanBuilder.hpp"
+
+class FilterPlan : public ExecutionPlan
+{
+public:
+    FilterPlan(std::unique_ptr<ExecutionPlan> input,
+               const hsql::Expr *condition)
+        : input_(std::move(input)), condition_(condition) {}
+
+    std::shared_ptr<Table> execute() override;
+
+private:
+    std::unique_ptr<ExecutionPlan> input_;
+    const hsql::Expr *condition_;
+};
 
 class Filter
 {

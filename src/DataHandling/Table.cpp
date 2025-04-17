@@ -51,6 +51,18 @@ void Table::processHeaders(const std::vector<std::string> &originalHeaders)
     }
 }
 
+void Table::addRow(std::vector<std::string> &row)
+{
+    if (row.size() != headers.size())
+    {
+        throw std::invalid_argument(
+            "Row size (" + std::to_string(row.size()) +
+            ") doesn't match table columns (" +
+            std::to_string(headers.size()) + ")");
+    }
+    data.push_back(row);
+}
+
 std::string Table::cleanPrimaryKeyHeader(std::string header)
 {
     size_t pos = header.find("(P)");

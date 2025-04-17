@@ -36,10 +36,20 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt)
     return plan_builder_->build(stmt)->execute();
 }
 
+// Update validateSelectStatement
 void QueryExecutor::validateSelectStatement(const hsql::SelectStatement *stmt)
 {
     if (!stmt->fromTable)
     {
         throw SemanticError("Missing FROM clause");
+    }
+
+    // Validate projection list
+    for (const auto *expr : *(stmt->selectList))
+    {
+        if (expr->type == hsql::kExprFunctionRef)
+        {
+            throw SemanticError("Aggregate functions not yet supported");
+        }
     }
 }

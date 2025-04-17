@@ -23,4 +23,9 @@ private:
     std::unique_ptr<ExecutionPlan> buildScanPlan(const hsql::TableRef *table);
     std::unique_ptr<ExecutionPlan> buildFilterPlan(std::unique_ptr<ExecutionPlan> input,
                                                    const hsql::Expr *where);
+
+    // Add to existing PlanBuilder class
+    std::unique_ptr<ExecutionPlan> buildProjectPlan(
+        std::unique_ptr<ExecutionPlan> input,
+        const std::vector<hsql::Expr *> &select_list);
 };

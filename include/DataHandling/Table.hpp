@@ -24,6 +24,8 @@ public:
     const std::vector<std::vector<std::string>> &getData() const;
     const std::vector<std::string> &getPrimaryKeys() const;
     const std::unordered_map<std::string, ForeignKeyInfo> &getForeignKeys() const;
+    void addRow(std::vector<std::string> &row);
+
     size_t getColumnIndex(const std::string &columnName) const;
     bool hasColumn(const std::string &columnName) const;
 
