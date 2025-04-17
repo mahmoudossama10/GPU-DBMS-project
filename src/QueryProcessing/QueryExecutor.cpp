@@ -45,11 +45,11 @@ void QueryExecutor::validateSelectStatement(const hsql::SelectStatement *stmt)
     }
 
     // Validate projection list
-    for (const auto *expr : *(stmt->selectList))
-    {
-        if (expr->type == hsql::kExprFunctionRef)
-        {
-            throw SemanticError("Aggregate functions not yet supported");
-        }
-    }
+    // for (const auto *expr : *(stmt->selectList))
+    // {
+    //     if (expr->type == hsql::kExprFunctionRef)
+    //     {
+    //         throw SemanticError("Aggregate functions not yet supported");
+    //     }
+    // }
 }

@@ -22,6 +22,7 @@ public:
     const std::string &getName() const;
     const std::vector<std::string> &getHeaders() const;
     const std::vector<std::vector<std::string>> &getData() const;
+    const int getSize() const;
     const std::vector<std::string> &getPrimaryKeys() const;
     const std::unordered_map<std::string, ForeignKeyInfo> &getForeignKeys() const;
     void addRow(std::vector<std::string> &row);

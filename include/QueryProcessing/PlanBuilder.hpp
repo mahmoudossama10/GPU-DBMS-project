@@ -28,4 +28,8 @@ private:
     std::unique_ptr<ExecutionPlan> buildProjectPlan(
         std::unique_ptr<ExecutionPlan> input,
         const std::vector<hsql::Expr *> &select_list);
+
+    std::unique_ptr<ExecutionPlan> buildAggregatePlan(
+        std::unique_ptr<ExecutionPlan> input,
+        const std::vector<hsql::Expr *> &select_list);
 };

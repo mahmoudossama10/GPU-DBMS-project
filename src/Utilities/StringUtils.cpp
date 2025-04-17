@@ -101,4 +101,11 @@ namespace StringUtils
         return str.size() >= suffix.size() &&
                str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
     }
+    std::string toLower(const std::string& s) {
+        std::string out = s;
+        std::transform(out.begin(), out.end(), out.begin(),
+          [](unsigned char c){ return std::tolower(c); });
+        return out;
+      }
+      
 }

@@ -116,3 +116,8 @@ bool Table::hasColumn(const std::string &columnName) const
 {
     return columnIndices.find(columnName) != columnIndices.end();
 }
+
+const int Table::getSize() const
+{
+    return data.size();
+}

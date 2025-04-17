@@ -58,6 +58,7 @@ std::vector<std::string> ProjectPlan::getColumnNames() const
         }
         else
         {
+            std::cout<<expr->type<<'\n';
             throw SemanticError("Unnamed projection expressions require aliases");
         }
     }
