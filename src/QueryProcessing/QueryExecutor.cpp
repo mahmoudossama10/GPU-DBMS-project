@@ -2,6 +2,8 @@
 #include "../../include/QueryProcessing/PlanBuilder.hpp"
 #include "Utilities/ErrorHandling.hpp"
 
+#include <hsql/util/sqlhelper.h>
+
 QueryExecutor::QueryExecutor(std::shared_ptr<StorageManager> storage)
     : storage_(storage),
       plan_builder_(std::make_unique<PlanBuilder>(storage)) {}
@@ -10,7 +12,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
 {
     hsql::SQLParserResult result;
     hsql::SQLParser::parse(query, &result);
-
+    // hsql::printStatementInfo(result.getStatement(0));
     if (!result.isValid())
     {
         throw SyntaxError("Parse error: " + std::string(result.errorMsg()));

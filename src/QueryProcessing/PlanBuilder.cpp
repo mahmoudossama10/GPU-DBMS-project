@@ -3,6 +3,7 @@
 #include "../../include/Operations/Project.hpp"
 #include "../../include/Operations/Aggregator.hpp"
 #include "../../include/Operations/OrderBy.hpp"
+#include "../../include/Operations/Join.hpp"
 #include "Utilities/ErrorHandling.hpp"
 #include <iostream>
 namespace
@@ -62,17 +63,21 @@ class TableScanPlan : public ExecutionPlan
 {
 public:
     TableScanPlan(std::shared_ptr<StorageManager> storage,
-                  const std::string &table_name)
-        : storage_(storage), table_name_(table_name) {}
+                  const std::string &table_name,
+                  const std::string &alias = "")
+        : storage_(storage), table_name_(table_name), alias_(alias) {}
 
     std::shared_ptr<Table> execute() override
     {
         return std::make_shared<Table>(storage_->getTable(table_name_));
     }
 
+    const std::string &getAlias() const { return alias_; }
+
 private:
     std::shared_ptr<StorageManager> storage_;
     std::string table_name_;
+    std::string alias_;
 };
 
 PlanBuilder::PlanBuilder(std::shared_ptr<StorageManager> storage)
@@ -132,11 +137,45 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildOrderByPlan(
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
 {
-    if (table->type != hsql::kTableName)
+    switch (table->type)
     {
-        throw SemanticError("Only direct table scans supported in minimal implementation");
+    case hsql::kTableName:
+    {
+        std::string alias = table->alias ? std::string(table->alias->name) : "";
+        return std::make_unique<TableScanPlan>(storage_, table->name, alias);
     }
-    return std::make_unique<TableScanPlan>(storage_, table->name);
+
+    case hsql::kTableCrossProduct:
+    {
+        if (!table->list || table->list->size() != 2)
+        {
+            throw SemanticError("Unsupported cross product specification");
+        }
+
+        auto left = buildScanPlan(table->list->at(0));
+        auto right = buildScanPlan(table->list->at(1));
+
+        std::string left_alias, right_alias;
+
+        if (auto *left_scan = dynamic_cast<TableScanPlan *>(left.get()))
+        {
+            left_alias = left_scan->getAlias();
+        }
+        if (auto *right_scan = dynamic_cast<TableScanPlan *>(right.get()))
+        {
+            right_alias = right_scan->getAlias();
+        }
+
+        return std::make_unique<JoinPlan>(
+            std::move(left),
+            std::move(right),
+            left_alias,
+            right_alias);
+    }
+
+    default:
+        throw SemanticError("Unsupported table reference type");
+    }
 }
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildFilterPlan(

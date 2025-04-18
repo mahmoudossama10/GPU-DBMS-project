@@ -58,7 +58,7 @@ void CommandLineInterface::processQuery(const std::string &query)
     {
         QueryExecutor executor(storageManager);
         std::shared_ptr<Table> result = executor.execute(query);
-
+        
         if (result)
         {
             // Display column headers

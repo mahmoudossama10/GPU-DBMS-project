@@ -179,29 +179,55 @@ bool Filter::handleOperator(
                             std::to_string(expr->opType));
     }
 }
-
 bool Filter::handleComparison(
     const std::vector<std::string> &row,
     const hsql::Expr *expr,
     const std::vector<std::string> &headers,
     const std::unordered_map<std::string, size_t> &columnIndexMap)
 {
-
     auto getValue = [&](const hsql::Expr *e) -> std::string
     {
         if (e->type == hsql::kExprColumnRef)
         {
-            return row[columnIndexMap.at(e->name)];
+            std::string full_column_name;
+
+            // Handle aliased columns (table.column)
+            if (e->table != nullptr && e->table[0] != '\0')
+            {
+                full_column_name = std::string(e->table) + "." + e->name;
+            }
+            // Handle unaliased columns
+            else
+            {
+                full_column_name = e->name;
+            }
+
+            try
+            {
+                return row[columnIndexMap.at(full_column_name)];
+            }
+            catch (const std::out_of_range &)
+            {
+                // Fallback to try without table prefix
+                try
+                {
+                    return row[columnIndexMap.at(e->name)];
+                }
+                catch (const std::out_of_range &)
+                {
+                    throw SemanticError("Column not found: " + full_column_name);
+                }
+            }
         }
-        if (e->type == hsql::kExprLiteralInt)
+        else if (e->type == hsql::kExprLiteralInt)
         {
             return std::to_string(e->ival);
         }
-        if (e->type == hsql::kExprLiteralFloat)
+        else if (e->type == hsql::kExprLiteralFloat)
         {
             return std::to_string(e->fval);
         }
-        if (e->type == hsql::kExprLiteralString)
+        else if (e->type == hsql::kExprLiteralString)
         {
             return e->name;
         }
@@ -209,7 +235,6 @@ bool Filter::handleComparison(
     };
 
     const std::string lhs = getValue(expr->expr);
-
     const std::string rhs = getValue(expr->expr2);
 
     // Numeric comparison if possible
