@@ -2,6 +2,7 @@
 #include "../../include/Operations/Filter.hpp"
 #include "../../include/Operations/Project.hpp"
 #include "../../include/Operations/Aggregator.hpp"
+#include "../../include/Operations/OrderBy.hpp"
 #include "Utilities/ErrorHandling.hpp"
 #include <iostream>
 namespace
@@ -11,37 +12,47 @@ namespace
         // First, handle the simple "SELECT *" case, but only look at non‐function items:
         {
             int nonFuncCount = 0;
-            const hsql::Expr* onlyExpr = nullptr;
-            for (auto *expr : *selectList) {
-                if (expr->type == hsql::kExprFunctionRef) {
+            const hsql::Expr *onlyExpr = nullptr;
+            for (auto *expr : *selectList)
+            {
+                if (expr->type == hsql::kExprFunctionRef)
+                {
                     // ignore function calls entirely
                     continue;
                 }
                 nonFuncCount++;
-                if (nonFuncCount == 1) {
+                if (nonFuncCount == 1)
+                {
                     onlyExpr = expr;
                 }
             }
-            if (nonFuncCount <= 1 || onlyExpr->type == hsql::kExprStar) {
+            if (nonFuncCount <= 1 || onlyExpr->type == hsql::kExprStar)
+            {
                 return true;
             }
         }
 
         // Next, handle "SELECT table.*" (or mixed lists) by skipping functions again:
-        for (auto *expr : *selectList) {
-            if (expr->type == hsql::kExprFunctionRef) {
-                continue;  // ignore functions
+        for (auto *expr : *selectList)
+        {
+            if (expr->type == hsql::kExprFunctionRef)
+            {
+                continue; // ignore functions
             }
-            if (expr->type == hsql::kExprStar) {
+            if (expr->type == hsql::kExprStar)
+            {
                 return true;
             }
         }
 
         return false;
     }
-    bool hasAggregates(const std::vector<hsql::Expr*>& select_list) {
-        for (auto* expr : select_list) {
-            if (expr->type == hsql::kExprFunctionRef) return true;
+    bool hasAggregates(const std::vector<hsql::Expr *> &select_list)
+    {
+        for (auto *expr : select_list)
+        {
+            if (expr->type == hsql::kExprFunctionRef)
+                return true;
         }
         return false;
     }
@@ -78,15 +89,21 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
         plan = buildFilterPlan(std::move(plan), stmt->whereClause);
     }
 
-    if (hasAggregates(*(stmt->selectList))) {
+    if (hasAggregates(*(stmt->selectList)))
+    {
         plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
-    } 
+    }
 
     // Only add ProjectPlan if needed (not SELECT *)
     if (!isSelectAll(stmt->selectList))
     {
-        std::cout<<"Why tf are you even"<<'\n';
+        std::cout << "Why tf are you even" << '\n';
         plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
+    }
+
+    if (stmt->order && !stmt->order->empty())
+    {
+        plan = buildOrderByPlan(std::move(plan), *stmt->order);
     }
 
     return plan;
@@ -104,6 +121,13 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildAggregatePlan(
     const std::vector<hsql::Expr *> &select_list)
 {
     return std::make_unique<AggregatorPlan>(std::move(input), select_list);
+}
+
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildOrderByPlan(
+    std::unique_ptr<ExecutionPlan> input,
+    const std::vector<hsql::OrderDescription *> &order_exprs)
+{
+    return std::make_unique<OrderByPlan>(std::move(input), order_exprs);
 }
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)

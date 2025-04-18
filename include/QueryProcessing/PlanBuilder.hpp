@@ -32,4 +32,8 @@ private:
     std::unique_ptr<ExecutionPlan> buildAggregatePlan(
         std::unique_ptr<ExecutionPlan> input,
         const std::vector<hsql::Expr *> &select_list);
+
+    std::unique_ptr<ExecutionPlan> buildOrderByPlan(
+        std::unique_ptr<ExecutionPlan> input,
+        const std::vector<hsql::OrderDescription *> &order_exprs);
 };
