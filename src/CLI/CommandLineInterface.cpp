@@ -1,4 +1,5 @@
 #include "../../include/CLI/CommandLineInterface.hpp"
+#include "../../include/DataHandling/CSVProcessor.hpp"
 #include <iostream>
 #include <sstream>
 
@@ -94,6 +95,10 @@ void CommandLineInterface::processQuery(const std::string &query)
             }
 
             std::cout << rows.size() << " rows returned\n";
+
+            std::string outputPath = "data/output/query_output.csv";
+            CSVProcessor::saveCSV(outputPath, result->getHeaders(), result->getData());
+            std::cout << "Saved output to '" << outputPath << "'\n";
         }
         else
         {

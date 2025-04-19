@@ -13,6 +13,8 @@ public:
     static void writeCSV(const std::string &filepath,
                          const std::vector<std::string> &headers,
                          const std::vector<std::vector<std::string>> &data);
+                         
+    static void saveCSV(const std::string &filepath, const std::vector<std::string> &headers, const std::vector<std::vector<std::string>> &rows);
 
 private:
     static std::vector<std::string> parseCSVLine(const std::string &line);

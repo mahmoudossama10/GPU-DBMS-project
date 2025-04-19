@@ -1,8 +1,23 @@
 #include "DataHandling/CSVProcessor.hpp"
 #include <sstream>
+#include <fstream>
 #include <stdexcept>
 #include <iostream>
 #include <filesystem>
+#include <sys/stat.h>
+
+
+void ensureDirectoryExists(const std::string &dirPath)
+{
+    struct stat info;
+    if (stat(dirPath.c_str(), &info) != 0) // Check if directory exists
+    {
+        if (mkdir(dirPath.c_str(), 0777) != 0) // Try to create directory
+        {
+            throw std::runtime_error("Failed to create directory: " + dirPath);
+        }
+    }
+}
 
 CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 {
@@ -69,4 +84,37 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
     }
 
     return result;
+}
+
+void CSVProcessor::saveCSV(const std::string &filepath, const std::vector<std::string> &headers, const std::vector<std::vector<std::string>> &rows)
+{
+    ensureDirectoryExists("data/output/");
+    std::ofstream out(filepath);
+    if (!out.is_open())
+    {
+        throw std::runtime_error("Failed to open file for writing: " + filepath);
+    }
+
+    // Write headers
+    for (size_t i = 0; i < headers.size(); ++i)
+    {
+        out << headers[i];
+        if (i < headers.size() - 1)
+            out << ",";
+    }
+    out << "\n";
+
+    // Write rows
+    for (const auto &row : rows)
+    {
+        for (size_t i = 0; i < row.size(); ++i)
+        {
+            out << row[i];
+            if (i < row.size() - 1)
+                out << ",";
+        }
+        out << "\n";
+    }
+
+    out.close();
 }
