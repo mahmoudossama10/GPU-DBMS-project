@@ -2,6 +2,9 @@
 #include "../../include/DataHandling/CSVProcessor.hpp"
 #include <iostream>
 #include <sstream>
+#include <chrono>
+
+using namespace std::chrono;
 
 CommandLineInterface::CommandLineInterface()
     : storageManager(std::make_unique<StorageManager>()) {}
@@ -57,13 +60,18 @@ void CommandLineInterface::processQuery(const std::string &query)
 {
     try
     {
+
+        auto start = high_resolution_clock::now();
+
         QueryExecutor executor(storageManager);
         std::shared_ptr<Table> result = executor.execute(query);
-        
+
         if (result)
         {
-            // Display column headers
             const auto &columns = result->getHeaders();
+            const auto &rows = result->getData();
+
+            // Display column headers
             for (size_t i = 0; i < columns.size(); ++i)
             {
                 std::cout << columns[i];
@@ -81,10 +89,11 @@ void CommandLineInterface::processQuery(const std::string &query)
             }
             std::cout << "\n";
 
-            // Display rows
-            const auto &rows = result->getData();
-            for (const auto &row : rows)
+            // Display first 10 rows
+            const size_t numRowsToShow = std::min<size_t>(rows.size(), 10);
+            for (size_t rowIdx = 0; rowIdx < numRowsToShow; ++rowIdx)
             {
+                const auto &row = rows[rowIdx];
                 for (size_t i = 0; i < row.size(); ++i)
                 {
                     std::cout << row[i];
@@ -94,11 +103,25 @@ void CommandLineInterface::processQuery(const std::string &query)
                 std::cout << "\n";
             }
 
+            // Show truncation message if needed
+            if (rows.size() > 10)
+            {
+                std::cout << "...\n";
+                std::cout << "(Showing first 10 of " << rows.size() << " rows)\n";
+            }
+
             std::cout << rows.size() << " rows returned\n";
 
+            // Save full results to CSV
             std::string outputPath = "data/output/query_output.csv";
             CSVProcessor::saveCSV(outputPath, result->getHeaders(), result->getData());
             std::cout << "Saved output to '" << outputPath << "'\n";
+
+            auto end = high_resolution_clock::now();
+
+            auto duration = duration_cast<milliseconds>(end - start); // You can use microseconds, seconds, etc.
+
+            std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
         }
         else
         {

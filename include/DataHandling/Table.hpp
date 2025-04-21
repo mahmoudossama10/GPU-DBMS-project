@@ -20,8 +20,13 @@ public:
 
     // Accessors
     const std::string &getName() const;
+    const std::string &getAlias() const;
+    std::string &setAlias(std::string alias) ;
+
     const std::vector<std::string> &getHeaders() const;
     const std::vector<std::vector<std::string>> &getData() const;
+    const std::vector<std::string> &getRow(int i) const;
+
     const int getSize() const;
     const std::vector<std::string> &getPrimaryKeys() const;
     const std::unordered_map<std::string, ForeignKeyInfo> &getForeignKeys() const;
@@ -36,6 +41,7 @@ private:
     ForeignKeyInfo parseForeignKeyHeader(const std::string &header);
 
     std::string tableName;
+    std::string alias;
     std::vector<std::string> headers;
     std::vector<std::vector<std::string>> data;
     std::unordered_map<std::string, size_t> columnIndices;

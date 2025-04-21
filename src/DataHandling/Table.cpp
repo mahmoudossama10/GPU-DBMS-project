@@ -97,6 +97,12 @@ ForeignKeyInfo Table::parseForeignKeyHeader(const std::string &header)
 
 // Accessor implementations
 const std::string &Table::getName() const { return tableName; }
+
+const std::string &Table::getAlias() const { return alias; }
+const std::vector<std::string> &Table::getRow(int i) const { return data[i]; }
+
+std::string &Table::setAlias(std::string alias) { alias = alias; }
+
 const std::vector<std::string> &Table::getHeaders() const { return headers; }
 const std::vector<std::vector<std::string>> &Table::getData() const { return data; }
 const std::vector<std::string> &Table::getPrimaryKeys() const { return primaryKeys; }

@@ -18,7 +18,6 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
         throw SyntaxError("Parse error: " + std::string(result.errorMsg()));
     }
 
-    
     if (result.size() != 1)
     {
         throw SyntaxError("Only single-statement queries supported");

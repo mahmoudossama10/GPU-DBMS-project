@@ -1,5 +1,8 @@
-name
-Bob
-Eve
-Eve
-Eve
+emp_id_P,name,id_id,age,dept_id_P,dept_name
+1,Alice,101,20,101,Engineering
+2,Bob,102,25,102,HR
+3,Charlie,101,30,101,Engineering
+4,David,103,35,103,Marketing
+5,Eve,102,22,102,HR
+6,Eve,102,50,102,HR
+7,Eve,102,40,102,HR

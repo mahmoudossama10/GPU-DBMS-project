@@ -18,7 +18,6 @@ namespace
         return *end == '\0';
     }
 
-    // Helper to check if a string represents a float
     bool isFloat(const std::string &s)
     {
         char *end;
@@ -56,6 +55,7 @@ namespace
 
         return false;
     }
+
     bool hasAggregates(const std::vector<hsql::Expr *> &select_list)
     {
         for (auto *expr : select_list)
@@ -141,37 +141,241 @@ private:
     std::string alias_;
 };
 
-PlanBuilder::PlanBuilder(std::shared_ptr<StorageManager> storage)
-    : storage_(storage) {}
+// Implementation of GPUJoinPlan
+GPUJoinPlan::GPUJoinPlan(std::vector<std::shared_ptr<Table>> tables,
+                         std::vector<std::string> table_names,
+                         const hsql::Expr *where_clause,
+                         std::shared_ptr<GPUManager> gpu_manager)
+    : tables_(std::move(tables)),
+      table_names_(std::move(table_names)),
+      where_clause_(where_clause),
+      gpu_manager_(gpu_manager) {}
+
+std::shared_ptr<Table> GPUJoinPlan::execute()
+{
+    if (tables_.empty())
+    {
+        throw SemanticError("No tables to join in GPU plan");
+    }
+
+    // Handle single table case with potential filtering
+    if (tables_.size() == 1)
+    {
+        auto &table = tables_[0];
+
+        if (where_clause_)
+        {
+            // Apply GPU filter to single table
+            auto mask = gpu_manager_->gpuFilterTable(*table, where_clause_);
+            return gpu_manager_->applyFilter(*table, mask);
+        }
+        return table; // Return original table if no filter
+    }
+
+    // Multi-table join processing
+    std::shared_ptr<Table> result = tables_[0];
+
+    for (size_t i = 1; i < tables_.size(); i++)
+    {
+        result = gpu_manager_->executeJoin(result, tables_[i], where_clause_);
+    }
+
+    return result;
+}
+
+PlanBuilder::PlanBuilder(std::shared_ptr<StorageManager> storage, ExecutionMode mode)
+    : storage_(storage), execution_mode_(mode)
+{
+    if (mode == ExecutionMode::GPU)
+    {
+        gpu_manager_ = std::make_shared<GPUManager>();
+    }
+}
+
+void PlanBuilder::setExecutionMode(ExecutionMode mode)
+{
+    execution_mode_ = mode;
+    if (mode == ExecutionMode::GPU && !gpu_manager_)
+    {
+        gpu_manager_ = std::make_shared<GPUManager>();
+    }
+}
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *stmt)
 {
-    auto plan = buildScanPlan(stmt->fromTable);
 
-    // Apply WHERE clause if present
-    if (stmt->whereClause)
+    // Check for subqueries in the FROM clause
+    setExecutionMode(ExecutionMode::GPU);
+    bool has_subquery = hasSubqueryInTableRef(stmt->fromTable);
+
+    // If using GPU and there's no subquery in FROM, use GPU path
+    if (execution_mode_ == ExecutionMode::GPU && !has_subquery)
     {
-        plan = buildFilterPlan(std::move(plan), stmt->whereClause);
+        // Use GPU for scan and filter in one operation
+        if (stmt->whereClause)
+        {
+            auto plan = buildGPUScanPlan(stmt->fromTable, stmt->whereClause);
+
+            // Continue with CPU operations for the rest of the pipeline
+            if (hasAggregates(*(stmt->selectList)))
+            {
+                plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+            }
+
+            if (!isSelectAll(stmt->selectList))
+            {
+                plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
+            }
+
+            if (stmt->order && !stmt->order->empty())
+            {
+                plan = buildOrderByPlan(std::move(plan), *stmt->order);
+            }
+
+            return plan;
+        }
+        else
+        {
+            // Fall back to CPU path
+            auto plan = buildScanPlan(stmt->fromTable);
+
+            // Apply WHERE clause if present
+            if (stmt->whereClause)
+            {
+                plan = buildFilterPlan(std::move(plan), stmt->whereClause);
+            }
+
+            // Continue with CPU operations for the rest of the pipeline
+            if (hasAggregates(*(stmt->selectList)))
+            {
+                plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+            }
+
+            if (!isSelectAll(stmt->selectList))
+            {
+                plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
+            }
+
+            if (stmt->order && !stmt->order->empty())
+            {
+                plan = buildOrderByPlan(std::move(plan), *stmt->order);
+            }
+
+            return plan;
+        }
+    }
+    else
+    {
+
+        // Fall back to CPU path
+        auto plan = buildScanPlan(stmt->fromTable);
+
+        // Apply WHERE clause if present
+        if (stmt->whereClause)
+        {
+            plan = buildFilterPlan(std::move(plan), stmt->whereClause);
+        }
+
+        if (hasAggregates(*(stmt->selectList)))
+        {
+            plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+        }
+
+        // Only add ProjectPlan if needed (not SELECT *)
+        if (!isSelectAll(stmt->selectList))
+        {
+            plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
+        }
+
+        if (stmt->order && !stmt->order->empty())
+        {
+            plan = buildOrderByPlan(std::move(plan), *stmt->order);
+        }
+
+        return plan;
+    }
+}
+
+bool PlanBuilder::hasSubqueryInTableRef(const hsql::TableRef *table)
+{
+    if (!table)
+        return false;
+
+    switch (table->type)
+    {
+    case hsql::kTableSelect:
+        return true;
+    case hsql::kTableCrossProduct:
+        if (table->list)
+        {
+            for (auto *t : *table->list)
+            {
+                if (hasSubqueryInTableRef(t))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    default:
+        return false;
+    }
+}
+
+std::vector<std::pair<std::string, std::string>> PlanBuilder::extractTableReferences(const hsql::TableRef *table)
+{
+    std::vector<std::pair<std::string, std::string>> result;
+
+    if (!table)
+        return result;
+
+    switch (table->type)
+    {
+    case hsql::kTableName:
+    {
+        std::string alias = table->alias ? std::string(table->alias->name) : "";
+        result.emplace_back(table->name, alias);
+        break;
+    }
+    case hsql::kTableCrossProduct:
+        if (table->list)
+        {
+            for (auto *t : *table->list)
+            {
+                auto refs = extractTableReferences(t);
+                result.insert(result.end(), refs.begin(), refs.end());
+            }
+        }
+        break;
+    default:
+        break;
     }
 
-    if (hasAggregates(*(stmt->selectList)))
+    return result;
+}
+
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUScanPlan(const hsql::TableRef *table, const hsql::Expr *where)
+{
+    // Extract all table references
+    auto table_refs = extractTableReferences(table);
+
+    // Load all tables
+    std::vector<std::shared_ptr<Table>> tables;
+    std::vector<std::string> table_names;
+
+    for (const auto &ref : table_refs)
     {
-        plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+        std::string alias = ref.second.empty() ? ref.first : ref.second;
+
+        tables.push_back(std::make_shared<Table>(storage_->getTable(ref.first)));
+        tables.back()->setAlias(ref.second);
+        table_names.push_back(ref.first);
+
+        // Set alias if provided, otherwise use table name as alias
     }
 
-    // Only add ProjectPlan if needed (not SELECT *)
-    if (!isSelectAll(stmt->selectList))
-    {
-        std::cout << "Why tf are you even" << '\n';
-        plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
-    }
-
-    if (stmt->order && !stmt->order->empty())
-    {
-        plan = buildOrderByPlan(std::move(plan), *stmt->order);
-    }
-
-    return plan;
+    // Create GPU join plan that handles filter conditions
+    return std::make_unique<GPUJoinPlan>(tables, table_names, where, gpu_manager_);
 }
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildProjectPlan(
@@ -238,16 +442,13 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *
             alias = "subquery"; // Default alias if none specified
         }
 
-        // Store the subquery result with its alias
-        // Note: We might need to add functionality to set the alias in the Table class
-
         // Return the SubqueryPlan that will yield the subquery result
         return std::make_unique<SubqueryPlan>(subquery_result);
     }
 
     case hsql::kTableCrossProduct:
     {
-        if (!table->list || table->list->size() != 2)
+        if (!table->list || table->list->size() < 2)
         {
             throw SemanticError("Unsupported cross product specification");
         }
@@ -266,11 +467,32 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *
             right_alias = right_scan->getAlias();
         }
 
-        return std::make_unique<JoinPlan>(
+        // Start with joining the first two tables
+        auto join_plan = std::make_unique<JoinPlan>(
             std::move(left),
             std::move(right),
             left_alias,
             right_alias);
+
+        // If there are more than 2 tables, join them one by one
+        for (size_t i = 2; i < table->list->size(); i++)
+        {
+            auto next_table = buildScanPlan(table->list->at(i));
+            std::string next_alias;
+
+            if (auto *next_scan = dynamic_cast<TableScanPlan *>(next_table.get()))
+            {
+                next_alias = next_scan->getAlias();
+            }
+
+            join_plan = std::make_unique<JoinPlan>(
+                std::move(join_plan),
+                std::move(next_table),
+                "", // No alias for intermediate result
+                next_alias);
+        }
+
+        return join_plan;
     }
 
     default:
@@ -288,11 +510,8 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildFilterPlan(
     // Check if the WHERE clause contains a subquery
     if (hasSubquery(where))
     {
-
         // Deep copy the WHERE clause to avoid modifying the original AST
         processed_where = processWhereWithSubqueries(where);
-
-        hsql::printExpression(const_cast<hsql::Expr *>(processed_where), 5);
     }
 
     return std::make_unique<FilterPlan>(std::move(input), processed_where);
@@ -339,7 +558,6 @@ hsql::Expr *PlanBuilder::processWhereWithSubqueries(const hsql::Expr *expr)
     // Copy other fields as needed
     result->ival = expr->ival;
     result->fval = expr->fval;
-    // result->dateFormat = expr->dateFormat;
 
     return result;
 }
@@ -357,15 +575,12 @@ hsql::Expr *PlanBuilder::processSubqueryExpression(const hsql::Expr *expr)
     std::shared_ptr<Table> subquery_result = subquery_plan->execute();
 
     // Create a literal expression based on the subquery result
-    // This will depend on the context (scalar subquery vs. IN/EXISTS)
     hsql::Expr *result = nullptr;
 
     // For scalar subquery, get the single value from the result
     if (subquery_result->getSize() == 1 && subquery_result->getHeaders().size() == 1)
     {
         // Extract the single value from the result
-        // We need to implement value extraction based on the column type
-        // For simplicity, assuming it's an integer here
         const std::string value = subquery_result->getData()[0][0];
         if (isInteger(value))
         {
