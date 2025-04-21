@@ -1,4 +1,4 @@
-employee_id_P,name,#department_id_id,salary,age
+employee_id_P,name,departments_department_id,salary,age
 1,Ava Jones,858,106931,59
 2,James Williams,458,100592,52
 3,William Garcia,566,129991,56

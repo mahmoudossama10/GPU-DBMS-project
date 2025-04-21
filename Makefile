@@ -3,8 +3,8 @@ CXX := g++
 NVCC := nvcc
 
 # Flags
-CXXFLAGS := -std=c++17 -Wall -Wextra -Iinclude -I/sql-parser-main/src
-NVCCFLAGS := -std=c++17 -Iinclude -I/sql-parser-main/src
+CXXFLAGS := -std=c++14 -Wall -Wextra -Iinclude -I/sql-parser-main/src
+NVCCFLAGS := -std=c++14 -Iinclude -I/sql-parser-main/src
 LDFLAGS := -L/sql-parser-main/build -lsqlparser -lcudart -L/usr/local/cuda/lib64
 
 # Directories

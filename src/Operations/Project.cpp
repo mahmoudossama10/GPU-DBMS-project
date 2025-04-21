@@ -1,4 +1,5 @@
 #include "../../include/Operations/Project.hpp"
+#include "../../include/DataHandling/Table.hpp"
 #include "Utilities/ErrorHandling.hpp"
 #include <algorithm>
 #include <unordered_map>
@@ -8,7 +9,7 @@
 #include <algorithm> // for to_lower
 #include <cmath>     // for NaN
 #include <regex>
-
+static_assert(sizeof(Table) > 0, "Table is incomplete here");
 namespace
 {
 
@@ -40,7 +41,8 @@ ProjectPlan::ProjectPlan(std::unique_ptr<ExecutionPlan> input,
 std::shared_ptr<Table> ProjectPlan::execute()
 {
     auto input_table = input_->execute();
-    return processProjection(input_table);
+    std::shared_ptr<Table> temp = processProjection(input_table);
+    return temp;
 }
 
 std::vector<std::string> ProjectPlan::getColumnNames() const
@@ -58,7 +60,7 @@ std::vector<std::string> ProjectPlan::getColumnNames() const
         }
         else
         {
-            std::cout<<expr->type<<'\n';
+            std::cout << expr->type << '\n';
             throw SemanticError("Unnamed projection expressions require aliases");
         }
     }
@@ -72,7 +74,18 @@ std::string ProjectPlan::evaluateExpression(const std::vector<std::string> &row,
     // Reuse Filter's column reference handling
     if (expr->type == hsql::kExprColumnRef)
     {
-        size_t col_idx = getColumnIndex(expr->name, headers);
+        size_t col_idx;
+        try
+        {
+            // Try direct column match first
+            col_idx = getColumnIndex(expr->name, headers);
+        }
+        catch (const std::exception &e)
+        {
+            // If failed, try alias.column match
+            std::string aliasedName = std::string(expr->table) + "." + std::string(expr->name);
+            col_idx = getColumnIndex(aliasedName, headers);
+        }
         return row[col_idx];
     }
     // Handle literals

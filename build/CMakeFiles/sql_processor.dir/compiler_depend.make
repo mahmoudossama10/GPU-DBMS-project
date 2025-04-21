@@ -3045,7 +3045,12 @@ CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o: ../src/Query
   /usr/include/c++/11/bits/istream.tcc \
   /usr/include/c++/11/cstring \
   /usr/include/string.h \
-  /usr/include/strings.h
+  /usr/include/strings.h \
+  /usr/include/c++/11/algorithm \
+  /usr/include/c++/11/bits/stl_algo.h \
+  /usr/include/c++/11/bits/algorithmfwd.h \
+  /usr/include/c++/11/bits/stl_heap.h \
+  /usr/include/c++/11/bits/uniform_int_dist.h
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o: ../src/QueryProcessing/QueryExecutor.cpp \
   /usr/include/stdc-predef.h \

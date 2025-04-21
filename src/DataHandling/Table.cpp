@@ -101,7 +101,10 @@ const std::string &Table::getName() const { return tableName; }
 const std::string &Table::getAlias() const { return alias; }
 const std::vector<std::string> &Table::getRow(int i) const { return data[i]; }
 
-std::string &Table::setAlias(std::string alias) { alias = alias; }
+std::string &Table::setAlias(std::string alias)
+{
+    this->alias = alias;
+}
 
 const std::vector<std::string> &Table::getHeaders() const { return headers; }
 const std::vector<std::vector<std::string>> &Table::getData() const { return data; }
