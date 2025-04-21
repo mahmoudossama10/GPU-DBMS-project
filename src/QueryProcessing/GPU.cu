@@ -3,15 +3,17 @@
 #include <iostream>
 #include <algorithm>
 #include <cstring>
+#include <cuda_runtime.h>
 
 // CUDA kernels
 
-__device__ int strcmp_device(const char* a, const char* b) {
-    while (*a && (*a == *b)) {
-        a++;
-        b++;
+// Helper for string comparison on device
+__device__ int strcmp_device(const char* str1, const char* str2) {
+    while (*str1 && (*str1 == *str2)) {
+        str1++;
+        str2++;
     }
-    return *(const unsigned char*)a - *(const unsigned char*)b;
+    return *(const unsigned char*)str1 - *(const unsigned char*)str2;
 }
 
 
@@ -130,43 +132,57 @@ __global__ void compareIntWithConstant(
         results[i] = match;
     }
 }
-
-__global__ void compareStringWithConstant(
-    const char** column, 
-    char* constant,
-    int size, 
-    uint8_t* results, 
-    int opType) 
+// New kernel that uses the improved string storage approach
+__global__ void compareStringWithConstantImproved(
+    const char* stringBuffer,
+    const size_t* stringOffsets,
+    const char* constant,
+    int size,
+    uint8_t* results,
+    int opType)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     
     if (i < size) {
-        uint8_t match = 0;
+        // Get pointer to the current string using the offset
+        const char* currentString = stringBuffer + stringOffsets[i];
         
+        int comparison = 0;
+        // Compare strings
+        while (*currentString == *constant && *currentString && *constant) {
+            currentString++;
+            constant++;
+        }
+        
+        comparison = (unsigned char)*currentString - (unsigned char)*constant;
+        
+        uint8_t match = 0;
         switch (opType) {
             case 0: // Equals
-                match = (strcmp_device(column[i], constant) == 0) ? 1 : 0;
+                match = (comparison == 0) ? 1 : 0;
                 break;
             case 1: // Not Equals
-                match = (strcmp_device(column[i], constant) != 0) ? 1 : 0;
+                match = (comparison != 0) ? 1 : 0;
                 break;
             case 2: // Less Than
-                match = (strcmp_device(column[i], constant) < 0) ? 1 : 0;
+                match = (comparison < 0) ? 1 : 0;
                 break;
             case 3: // Greater Than
-                match = (strcmp_device(column[i], constant) > 0) ? 1 : 0;
+                match = (comparison > 0) ? 1 : 0;
                 break;
             case 4: // Less Than or Equals
-                match = (strcmp_device(column[i], constant) <= 0) ? 1 : 0;
+                match = (comparison <= 0) ? 1 : 0;
                 break;
             case 5: // Greater Than or Equals
-                match = (strcmp_device(column[i], constant) >= 0) ? 1 : 0;
+                match = (comparison >= 0) ? 1 : 0;
                 break;
         }
         
         results[i] = match;
     }
 }
+
+
 
 __global__ void combineResults(
     const uint8_t* results1, 
@@ -399,6 +415,7 @@ std::vector<uint8_t> GPUManager::gpuFilterTable(
             
             uint8_t* d_results;
             cudaMalloc(&d_results, tableSize * sizeof(uint8_t));
+            cudaMemset(d_results, 0, tableSize * sizeof(uint8_t));
             
             int blockSize = 256;
             int numBlocks = (tableSize + blockSize - 1) / blockSize;
@@ -436,27 +453,57 @@ std::vector<uint8_t> GPUManager::gpuFilterTable(
             // For string comparison
             else if (conditions->expr2->type == hsql::kExprLiteralString) {
                 const char* constant = conditions->expr2->name;
+                size_t constantLen = strlen(constant) + 1; // +1 for null terminator
                 
-                // Prepare column data for GPU (simplified - in reality, this would be more complex for strings)
-                std::vector<const char*> columnData(tableSize);
+                // Get string data from the table
                 const auto& data = table.getData();
+                
+                // Calculate total buffer size needed for all strings
+                size_t totalBufferSize = 0;
+                std::vector<size_t> stringLengths(tableSize);
+                std::vector<size_t> stringOffsets(tableSize);
+                
                 for (int i = 0; i < tableSize; i++) {
-                    columnData[i] = data[i][columnIndex].c_str();
+                    stringLengths[i] = data[i][columnIndex].length() + 1; // +1 for null terminator
+                    stringOffsets[i] = totalBufferSize;
+                    totalBufferSize += stringLengths[i];
                 }
                 
-                // Note: This is a simplified approach. In a real implementation,
-                // handling strings in CUDA would be more complex.
-                const char** d_column;
+                // Create a buffer for all strings
+                char* stringBuffer = new char[totalBufferSize];
+                
+                // Copy strings to the buffer
+                for (int i = 0; i < tableSize; i++) {
+                    strcpy(stringBuffer + stringOffsets[i], data[i][columnIndex].c_str());
+                }
+                
+                // Allocate device memory
+                char* d_stringBuffer;
+                size_t* d_stringOffsets;
                 char* d_constant;
-                cudaMalloc(&d_column, tableSize * sizeof(char*));
-                cudaMalloc(&d_constant, strlen(constant) + 1);
                 
-                cudaMemcpy(d_column, columnData.data(), tableSize * sizeof(char*), cudaMemcpyHostToDevice);
-                cudaMemcpy(d_constant, constant, strlen(constant) + 1, cudaMemcpyHostToDevice);
+                cudaMalloc(&d_stringBuffer, totalBufferSize);
+                cudaMalloc(&d_stringOffsets, tableSize * sizeof(size_t));
+                cudaMalloc(&d_constant, constantLen);
                 
-                compareStringWithConstant<<<numBlocks, blockSize>>>(d_column, d_constant, tableSize, d_results, opType);
+                // Copy data to device
+                cudaMemcpy(d_stringBuffer, stringBuffer, totalBufferSize, cudaMemcpyHostToDevice);
+                cudaMemcpy(d_stringOffsets, stringOffsets.data(), tableSize * sizeof(size_t), cudaMemcpyHostToDevice);
+                cudaMemcpy(d_constant, constant, constantLen, cudaMemcpyHostToDevice);
                 
-                cudaFree(d_column);
+                // Launch kernel with improved string handling
+                compareStringWithConstantImproved<<<numBlocks, blockSize>>>(
+                    d_stringBuffer, d_stringOffsets, d_constant, tableSize, d_results, opType);
+                
+                cudaError_t err = cudaGetLastError();
+                if (err != cudaSuccess) {
+                    std::cerr << "CUDA error: " << cudaGetErrorString(err) << std::endl;
+                }
+                
+                // Free allocated memory
+                delete[] stringBuffer;
+                cudaFree(d_stringBuffer);
+                cudaFree(d_stringOffsets);
                 cudaFree(d_constant);
             }
             
@@ -511,7 +558,8 @@ std::vector<uint8_t> GPUManager::processComparisonExpr(
         int rightColIndex = findColumnIndex(rightTable, rightColName, expr->expr2->table);
         
         if (leftColIndex == -1 || rightColIndex == -1) {
-            throw std::runtime_error("Column not found in comparison");
+            // throw std::runtime_error("Column not found in comparison");
+            return  std::vector<uint8_t> (resultSize, 1);
         }
         
         // Determine the operator type
@@ -570,10 +618,22 @@ std::vector<uint8_t> GPUManager::processComparisonExpr(
             cudaMemcpy(d_leftCol, leftColData.data(), leftSize * sizeof(int), cudaMemcpyHostToDevice);
             cudaMemcpy(d_rightCol, rightColData.data(), rightSize * sizeof(int), cudaMemcpyHostToDevice);
             
+            cudaEvent_t start, stop;
+            cudaEventCreate(&start);
+            cudaEventCreate(&stop);
+            cudaEventRecord(start);
             // Launch integer comparison kernel
             compareIntColumns<<<gridDim, blockDim>>>(
                 d_leftCol, d_rightCol, leftSize, rightSize, d_results, opType);
             
+                cudaEventRecord(stop);
+                cudaEventSynchronize(stop);
+                float elapsedTime;
+                cudaEventElapsedTime(&elapsedTime, start, stop);
+                std::cout << "Elapsed compareIntColumns time: " << elapsedTime << " milliseconds" << std::endl;
+                cudaEventDestroy(start);
+                cudaEventDestroy(stop);
+                
             // Copy results back to host
             cudaMemcpy(resultVector.data(), d_results, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
             
@@ -623,10 +683,24 @@ std::vector<uint8_t> GPUManager::processComparisonExpr(
             cudaMemcpy(d_leftStrings, h_leftStrings, leftSize * sizeof(char*), cudaMemcpyHostToDevice);
             cudaMemcpy(d_rightStrings, h_rightStrings, rightSize * sizeof(char*), cudaMemcpyHostToDevice);
             
+            
             // Launch string comparison kernel
+
+            cudaEvent_t start, stop;
+            cudaEventCreate(&start);
+            cudaEventCreate(&stop);
+            cudaEventRecord(start);
+
             compareStringColumns<<<gridDim, blockDim>>>(
                 d_leftStrings, d_rightStrings, leftSize, rightSize, d_results, opType);
             
+            cudaEventRecord(stop);
+            cudaEventSynchronize(stop);
+            float elapsedTime;
+            cudaEventElapsedTime(&elapsedTime, start, stop);
+            std::cout << "Elapsed time: " << elapsedTime << " milliseconds" << std::endl;
+            cudaEventDestroy(start);
+            cudaEventDestroy(stop);
             // Copy results back to host
             cudaMemcpy(resultVector.data(), d_results, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
             

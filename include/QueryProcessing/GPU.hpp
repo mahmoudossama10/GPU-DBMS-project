@@ -48,6 +48,15 @@ public:
     std::vector<std::vector<std::string>> mergeFilterResults(
         const Table &table,
         const std::vector<uint8_t> &mask) const;
+
+     hsql::Expr* simplifyCondition(hsql::Expr* expr);
+    std::vector<std::string> extractColumnReferences(hsql::Expr* expr);
+    int getParentOperationType(hsql::Expr* expr);
+    bool canExecuteCondition(std::shared_ptr<Table> table, hsql::Expr* condition);
+    hsql::Expr* filterJoinCondition(std::shared_ptr<Table> leftTable,
+        std::shared_ptr<Table> rightTable,
+        hsql::Expr* condition);
+
     // Check if GPU operations are available
     bool isGPUAvailable() const;
 

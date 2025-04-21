@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstring>
 #include <hsql/util/sqlhelper.h>
+#include <algorithm>
 
 namespace
 {
@@ -151,6 +152,44 @@ GPUJoinPlan::GPUJoinPlan(std::vector<std::shared_ptr<Table>> tables,
       where_clause_(where_clause),
       gpu_manager_(gpu_manager) {}
 
+void collectConditions(const hsql::Expr *expr, std::vector<const hsql::Expr *> &conditions)
+{
+    if (expr == nullptr)
+        return;
+
+    if (expr->opType == hsql::kOpAnd || expr->opType == hsql::kOpOr)
+    {
+        collectConditions(expr->expr, conditions);
+        collectConditions(expr->expr2, conditions);
+    }
+    else
+    {
+        conditions.push_back(expr);
+    }
+}
+
+void collectInvolvedTables(const hsql::Expr *expr, std::unordered_set<std::string> &tables)
+{
+    if (!expr)
+        return;
+
+    if (expr->type == hsql::kExprColumnRef && expr->table != nullptr)
+    {
+        tables.insert(expr->table); // or std::string(expr->table) if needed
+    }
+
+    collectInvolvedTables(expr->expr, tables);
+    collectInvolvedTables(expr->expr2, tables);
+
+    if (expr->exprList)
+    {
+        for (const auto *subExpr : *expr->exprList)
+        {
+            collectInvolvedTables(subExpr, tables);
+        }
+    }
+}
+
 std::shared_ptr<Table> GPUJoinPlan::execute()
 {
     if (tables_.empty())
@@ -172,10 +211,44 @@ std::shared_ptr<Table> GPUJoinPlan::execute()
         return table; // Return original table if no filter
     }
 
-    // Multi-table join processing
-    std::shared_ptr<Table> result = tables_[0];
+    // Create a map to count how many conditions each table is involved in
+    std::unordered_map<std::string, int> table_count;
 
-    for (size_t i = 1; i < tables_.size(); i++)
+    // Collect all table names present in the tables_ vector
+    std::unordered_set<std::string> table_names;
+    for (const auto &table : tables_)
+    {
+        table_names.insert(table->getName());
+    }
+
+    // Count the number of conditions each table is involved in
+    std::vector<const hsql::Expr *> conditionList;
+    collectConditions(where_clause_, conditionList);
+
+    for (const auto *condition : conditionList)
+    {
+        std::unordered_set<std::string> involved_tables;
+        collectInvolvedTables(condition, involved_tables);
+
+        for (const auto &table_name : involved_tables)
+        {
+            if (table_names.count(table_name))
+            {
+                table_count[table_name]++;
+            }
+        }
+    }
+
+    // Sort tables_ in descending order based on their condition count
+    // Use stable_sort to maintain original order for tables with the same count
+    std::stable_sort(tables_.begin(), tables_.end(),
+                     [&](const std::shared_ptr<Table> &a, const std::shared_ptr<Table> &b)
+                     {
+                         return table_count[a->getName()] > table_count[b->getName()];
+                     });
+
+    std::shared_ptr<Table> result = tables_[0];
+    for (size_t i = 1; i < tables_.size(); ++i)
     {
         result = gpu_manager_->executeJoin(result, tables_[i], where_clause_);
     }
@@ -203,77 +276,62 @@ void PlanBuilder::setExecutionMode(ExecutionMode mode)
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *stmt)
 {
-
-    // Check for subqueries in the FROM clause
-    setExecutionMode(ExecutionMode::GPU);
-    bool has_subquery = hasSubqueryInTableRef(stmt->fromTable);
-
-    // If using GPU and there's no subquery in FROM, use GPU path
-    if (execution_mode_ == ExecutionMode::GPU && !has_subquery)
+    if (!stmt)
     {
-        // Use GPU for scan and filter in one operation
-        if (stmt->whereClause)
-        {
-            auto plan = buildGPUScanPlan(stmt->fromTable, stmt->whereClause);
+        throw SemanticError("Invalid SELECT statement");
+    }
 
-            // Continue with CPU operations for the rest of the pipeline
-            if (hasAggregates(*(stmt->selectList)))
-            {
-                plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
-            }
+    // First, process subqueries in the WHERE clause, if any
+    setExecutionMode(ExecutionMode::GPU);
 
-            if (!isSelectAll(stmt->selectList))
-            {
-                plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
-            }
-
-            if (stmt->order && !stmt->order->empty())
-            {
-                plan = buildOrderByPlan(std::move(plan), *stmt->order);
-            }
-
-            return plan;
-        }
-        else
-        {
-            // Fall back to CPU path
-            auto plan = buildScanPlan(stmt->fromTable);
-
-            // Apply WHERE clause if present
-            if (stmt->whereClause)
-            {
-                plan = buildFilterPlan(std::move(plan), stmt->whereClause);
-            }
-
-            // Continue with CPU operations for the rest of the pipeline
-            if (hasAggregates(*(stmt->selectList)))
-            {
-                plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
-            }
-
-            if (!isSelectAll(stmt->selectList))
-            {
-                plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
-            }
-
-            if (stmt->order && !stmt->order->empty())
-            {
-                plan = buildOrderByPlan(std::move(plan), *stmt->order);
-            }
-
-            return plan;
-        }
+    hsql::Expr *processed_where = nullptr;
+    if (stmt->whereClause && hasSubquery(stmt->whereClause))
+    {
+        processed_where = processWhereWithSubqueries(stmt->whereClause);
     }
     else
     {
+        processed_where = const_cast<hsql::Expr *>(stmt->whereClause);
+    }
 
-        // Fall back to CPU path
+    // Check for subqueries in the FROM clause
+    bool has_subquery_in_from = hasSubqueryInTableRef(stmt->fromTable);
+
+    setExecutionMode(ExecutionMode::GPU);
+
+    // If using GPU and there are no complex subqueries, use GPU path
+    if (execution_mode_ == ExecutionMode::GPU && !has_subquery_in_from)
+    {
+        // Use GPU for scan and filter in one operation
+        auto plan = buildGPUScanPlan(stmt->fromTable, processed_where);
+
+        // Continue with CPU operations for the rest of the pipeline
+        if (hasAggregates(*(stmt->selectList)))
+        {
+            plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+        }
+
+        if (!isSelectAll(stmt->selectList))
+        {
+            plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
+        }
+
+        if (stmt->order && !stmt->order->empty())
+        {
+            plan = buildOrderByPlan(std::move(plan), *stmt->order);
+        }
+
+        return plan;
+    }
+    else
+    {
+        // CPU path with subquery handling
         auto plan = buildScanPlan(stmt->fromTable);
 
-        // Apply WHERE clause if present
-        if (stmt->whereClause)
+        // Apply processed WHERE clause if present
+        if (processed_where)
         {
-            plan = buildFilterPlan(std::move(plan), stmt->whereClause);
+            plan = buildFilterPlan(std::move(plan), processed_where);
         }
 
         if (hasAggregates(*(stmt->selectList)))
@@ -337,6 +395,13 @@ std::vector<std::pair<std::string, std::string>> PlanBuilder::extractTableRefere
         result.emplace_back(table->name, alias);
         break;
     }
+    case hsql::kTableSelect:
+    {
+        // Handle subquery in table reference
+        std::string alias = table->alias ? std::string(table->alias->name) : "subquery";
+        result.emplace_back(alias, alias); // Use alias for both name and alias
+        break;
+    }
     case hsql::kTableCrossProduct:
         if (table->list)
         {
@@ -367,15 +432,52 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUScanPlan(const hsql::TableRe
     {
         std::string alias = ref.second.empty() ? ref.first : ref.second;
 
-        tables.push_back(std::make_shared<Table>(storage_->getTable(ref.first)));
-        tables.back()->setAlias(ref.second);
-        table_names.push_back(ref.first);
+        // Check if this is a subquery result
+        if (ref.first == ref.second && ref.first != "" && hasSubqueryInTableRef(table))
+        {
+            // This is likely a subquery reference, process it
+            auto subquery_table = processSubqueryInFrom(table);
+            if (subquery_table)
+            {
+                tables.push_back(subquery_table);
+                tables.back()->setAlias(alias);
+                table_names.push_back(alias);
+                continue;
+            }
+        }
 
-        // Set alias if provided, otherwise use table name as alias
+        // Regular table
+        tables.push_back(std::make_shared<Table>(storage_->getTable(ref.first)));
+        tables.back()->setAlias(alias);
+        table_names.push_back(ref.first);
     }
 
     // Create GPU join plan that handles filter conditions
     return std::make_unique<GPUJoinPlan>(tables, table_names, where, gpu_manager_);
+}
+
+std::shared_ptr<Table> PlanBuilder::processSubqueryInFrom(const hsql::TableRef *table)
+{
+    if (table->type == hsql::kTableSelect)
+    {
+        // Process subquery directly
+        auto subquery_plan = build(table->select);
+        return subquery_plan->execute();
+    }
+    else if (table->type == hsql::kTableCrossProduct && table->list)
+    {
+        // Check if any table in cross product is a subquery
+        for (auto *t : *table->list)
+        {
+            if (t->type == hsql::kTableSelect)
+            {
+                // Process just this subquery
+                auto subquery_plan = build(t->select);
+                return subquery_plan->execute();
+            }
+        }
+    }
+    return nullptr;
 }
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildProjectPlan(
@@ -390,7 +492,11 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildProjectPlan(
         {
             // Process subquery and replace with a constant expression
             auto subquery_result = processSubqueryExpression(expr);
-            // TODO: Convert result to constant expression
+            // Replace the original expr with processed one if needed
+            if (subquery_result)
+            {
+                expr = subquery_result;
+            }
         }
     }
 
@@ -413,6 +519,11 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildOrderByPlan(
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
 {
+    if (!table)
+    {
+        throw SemanticError("Table reference is null");
+    }
+
     switch (table->type)
     {
     case hsql::kTableName:
@@ -429,20 +540,17 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *
             throw SemanticError("Subquery in FROM clause is null");
         }
 
-        // Process the subquery first
+        // Process the subquery by recursively calling build
         std::unique_ptr<ExecutionPlan> subquery_plan = build(table->select);
 
         // Execute the subquery plan to get the resulting table
         std::shared_ptr<Table> subquery_result = subquery_plan->execute();
 
-        // Create a SubqueryPlan that returns this result
-        std::string alias = table->alias ? std::string(table->alias->name) : "";
-        if (alias.empty())
-        {
-            alias = "subquery"; // Default alias if none specified
-        }
+        // Apply alias if specified
+        std::string alias = table->alias ? std::string(table->alias->name) : "subquery";
+        subquery_result->setAlias(alias);
 
-        // Return the SubqueryPlan that will yield the subquery result
+        // Return a plan that will yield the subquery result
         return std::make_unique<SubqueryPlan>(subquery_result);
     }
 
@@ -504,26 +612,17 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildFilterPlan(
     std::unique_ptr<ExecutionPlan> input,
     const hsql::Expr *where)
 {
-    // Process the WHERE clause to handle any subqueries
-    hsql::Expr *processed_where = const_cast<hsql::Expr *>(where);
-
-    // Check if the WHERE clause contains a subquery
-    if (hasSubquery(where))
-    {
-        // Deep copy the WHERE clause to avoid modifying the original AST
-        processed_where = processWhereWithSubqueries(where);
-    }
-
-    return std::make_unique<FilterPlan>(std::move(input), processed_where);
+    // WHERE clause should already be processed for subqueries by this point
+    return std::make_unique<FilterPlan>(std::move(input), where);
 }
 
-// New method to process subqueries in WHERE clause
+// Process WHERE clauses that contain subqueries
 hsql::Expr *PlanBuilder::processWhereWithSubqueries(const hsql::Expr *expr)
 {
     if (!expr)
         return nullptr;
 
-    // If this is a subquery expression, process it
+    // If this is a subquery expression, process it and return its result
     if (expr->type == hsql::kExprSelect)
     {
         return processSubqueryExpression(expr);
@@ -532,7 +631,16 @@ hsql::Expr *PlanBuilder::processWhereWithSubqueries(const hsql::Expr *expr)
     // Create a new expression with the same type and operation
     hsql::Expr *result = new hsql::Expr(expr->type);
     result->opType = expr->opType;
-    result->name = expr->name;
+
+    // Copy name if present
+    if (expr->name)
+    {
+        result->name = strdup(expr->name);
+    }
+    else
+    {
+        result->name = nullptr;
+    }
 
     // Process left and right children recursively
     if (expr->expr)
@@ -555,14 +663,15 @@ hsql::Expr *PlanBuilder::processWhereWithSubqueries(const hsql::Expr *expr)
         }
     }
 
-    // Copy other fields as needed
+    // Copy other fields
     result->ival = expr->ival;
     result->fval = expr->fval;
+    result->table = expr->table ? strdup(expr->table) : nullptr;
 
     return result;
 }
 
-// New method to process a subquery expression
+// Process a subquery expression and return its result as a literal expression
 hsql::Expr *PlanBuilder::processSubqueryExpression(const hsql::Expr *expr)
 {
     if (!expr || expr->type != hsql::kExprSelect)
@@ -570,7 +679,7 @@ hsql::Expr *PlanBuilder::processSubqueryExpression(const hsql::Expr *expr)
         throw SemanticError("Expected a subquery expression");
     }
 
-    // Build and execute the subquery plan
+    // Recursively build and execute the subquery plan
     std::unique_ptr<ExecutionPlan> subquery_plan = build(expr->select);
     std::shared_ptr<Table> subquery_result = subquery_plan->execute();
 
@@ -595,13 +704,44 @@ hsql::Expr *PlanBuilder::processSubqueryExpression(const hsql::Expr *expr)
         else
         {
             result = new hsql::Expr(hsql::kExprLiteralString);
-            result->name = new char[value.length() + 1];
-            std::strcpy(result->name, value.c_str());
+            result->name = strdup(value.c_str());
+        }
+    }
+    else if (subquery_result->getSize() >= 1 && subquery_result->getHeaders().size() == 1)
+    {
+        // Handle IN operation with list of values
+        result = new hsql::Expr(hsql::kExprOperator);
+        result->opType = hsql::kOpIn;
+
+        // Create a list of literal values
+        result->exprList = new std::vector<hsql::Expr *>();
+        for (const auto &row : subquery_result->getData())
+        {
+            const std::string &value = row[0];
+            hsql::Expr *literal = nullptr;
+
+            if (isInteger(value))
+            {
+                literal = new hsql::Expr(hsql::kExprLiteralInt);
+                literal->ival = std::stoi(value);
+            }
+            else if (isFloat(value))
+            {
+                literal = new hsql::Expr(hsql::kExprLiteralFloat);
+                literal->fval = std::stof(value);
+            }
+            else
+            {
+                literal = new hsql::Expr(hsql::kExprLiteralString);
+                literal->name = strdup(value.c_str());
+            }
+
+            result->exprList->push_back(literal);
         }
     }
     else
     {
-        throw SemanticError("Unsupported subquery type or result format");
+        throw SemanticError("Unsupported subquery result format: must return a single column");
     }
 
     return result;
