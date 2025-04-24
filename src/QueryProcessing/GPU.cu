@@ -18,6 +18,7 @@ __device__ int strcmp_device(const char* str1, const char* str2) {
 
 
 
+
 __global__ void compareStringColumns(
      char** leftColumn, 
      char** rightColumn,
@@ -57,6 +58,47 @@ __global__ void compareStringColumns(
     }
 }
 
+
+
+__global__ void compareStringColumnsOneTable(
+    char** leftColumn, 
+    char** rightColumn,
+   int leftSize, 
+   int rightSize,
+   uint8_t* results, 
+   int opType) 
+{
+   int i = blockIdx.x * blockDim.x + threadIdx.x;
+   
+   if (i < leftSize) {
+       uint8_t match = 0;
+       
+       switch (opType) {
+           case 0: // Equals
+               match = (strcmp_device(leftColumn[i], rightColumn[i]) == 0) ? 1 : 0;
+               break;
+           case 1: // Not Equals
+               match = (strcmp_device(leftColumn[i], rightColumn[i]) != 0) ? 1 : 0;
+               break;
+           case 2: // Less Than
+               match = (strcmp_device(leftColumn[i], rightColumn[i]) < 0) ? 1 : 0;
+               break;
+           case 3: // Greater Than
+               match = (strcmp_device(leftColumn[i], rightColumn[i]) > 0) ? 1 : 0;
+               break;
+           case 4: // Less Than or Equals
+               match = (strcmp_device(leftColumn[i], rightColumn[i]) <= 0) ? 1 : 0;
+               break;
+           case 5: // Greater Than or Equals
+               match = (strcmp_device(leftColumn[i], rightColumn[i]) >= 0) ? 1 : 0;
+               break;
+       }
+       
+       results[i] = match;
+   }
+}
+
+
 __global__ void compareIntColumns(
      int* leftColumn, 
      int* rightColumn,
@@ -94,6 +136,45 @@ __global__ void compareIntColumns(
         
         results[i * rightSize + j] = match;
     }
+}
+
+
+__global__ void compareIntColumnsOmeTable(
+    int* leftColumn, 
+    int* rightColumn,
+   int leftSize, 
+   int rightSize,
+   uint8_t* results, 
+   int opType) 
+{
+   int i = blockIdx.x * blockDim.x + threadIdx.x;
+   
+   if (i < leftSize) {
+       uint8_t match = 0;
+       
+       switch (opType) {
+           case 0: // Equals
+               match = (leftColumn[i] == rightColumn[i]) ? 1 : 0;
+               break;
+           case 1: // Not Equals
+               match = (leftColumn[i] != rightColumn[i]) ? 1 : 0;
+               break;
+           case 2: // Less Than
+               match = (leftColumn[i] < rightColumn[i]) ? 1 : 0;
+               break;
+           case 3: // Greater Than
+               match = (leftColumn[i] > rightColumn[i]) ? 1 : 0;
+               break;
+           case 4: // Less Than or Equals
+               match = (leftColumn[i] <= rightColumn[i]) ? 1 : 0;
+               break;
+           case 5: // Greater Than or Equals
+               match = (leftColumn[i] >= rightColumn[i]) ? 1 : 0;
+               break;
+       }
+       
+       results[i] = match;
+   }
 }
 
 __global__ void compareIntWithConstant(
@@ -212,6 +293,23 @@ GPUManager::GPUManager() {
         std::cout << "GPU acceleration available. Found " << deviceCount << " CUDA device(s)." << std::endl;
         hasGPU_ = true;
     }
+}
+
+// Helper function to check if a string can be parsed as an integer
+bool isInteger(const std::string& str) {
+    if (str.empty()) return false;
+    
+    size_t start = 0;
+    if (str[0] == '-' || str[0] == '+') {
+        if (str.size() == 1) return false;
+        start = 1;
+    }
+    
+    for (size_t i = start; i < str.size(); i++) {
+        if (!std::isdigit(str[i])) return false;
+    }
+    
+    return true;
 }
 
 GPUManager::~GPUManager() {
@@ -395,6 +493,7 @@ std::vector<uint8_t> GPUManager::gpuFilterTable(
     if (!hasGPU_) {
         throw std::runtime_error("GPU operations not available");
     }
+
     
     int tableSize = table.getSize();
     std::vector<uint8_t> resultVector(tableSize, 0);
@@ -511,27 +610,186 @@ std::vector<uint8_t> GPUManager::gpuFilterTable(
             cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
             cudaFree(d_results);
         }
+
+
+        else{
+            // Column-column comparison
+            if (conditions->expr->type == hsql::kExprColumnRef && conditions->expr2->type == hsql::kExprColumnRef) {
+              const char* leftColName = conditions->expr->name;
+              const char* rightColName = conditions->expr2->name;
+              
+              int leftColIndex = findColumnIndex(table, leftColName, conditions->expr->table);
+              int rightColIndex = findColumnIndex(table, rightColName, conditions->expr2->table);
+              
+              
+              // Determine the operator type
+              int opType;
+              switch (conditions->opType) {
+                  case hsql::OperatorType::kOpEquals: opType = 0; break;
+                  case hsql::OperatorType::kOpNotEquals: opType = 1; break;
+                  case hsql::OperatorType::kOpLess: opType = 2; break;
+                  case hsql::OperatorType::kOpGreater: opType = 3; break;
+                  case hsql::OperatorType::kOpLessEq: opType = 4; break;
+                  case hsql::OperatorType::kOpGreaterEq: opType = 5; break;
+                  default: throw std::runtime_error("Unsupported operator type");
+              }
+              
+              const auto& leftData = table.getData();
+              const auto& rightData = table.getData();
+              
+              // Check if we're dealing with integer or string columns
+              bool isIntegerComparison = false;
+              if (!leftData.empty() && !rightData.empty()) {
+                  // Sample the first row of each table to determine type
+                  isIntegerComparison = isInteger(leftData[0][leftColIndex]) && isInteger(rightData[0][rightColIndex]);
+              }
+              
+              // Set up grid and block dimensions for 2D execution
+              dim3 blockDim(16, 16);
+              dim3 gridDim(
+                  (tableSize + blockDim.x - 1) / blockDim.x,
+                  (tableSize + blockDim.y - 1) / blockDim.y
+              );
+              
+              if (isIntegerComparison) {
+                  // Handle integer columns
+                  std::vector<int> leftColData(tableSize);
+                  std::vector<int> rightColData(tableSize);
+                  
+                  // Prepare column data
+                  for (int i = 0; i < tableSize; i++) {
+                      leftColData[i] = std::stoi(leftData[i][leftColIndex]);
+                  }
+                  
+                  for (int i = 0; i < tableSize; i++) {
+                      rightColData[i] = std::stoi(rightData[i][rightColIndex]);
+                  }
+                  
+                  // Allocate device memory
+                  int *d_leftCol, *d_rightCol;
+                  uint8_t *d_results;
+                  
+                  cudaMalloc(&d_leftCol, tableSize * sizeof(int));
+                  cudaMalloc(&d_rightCol, tableSize * sizeof(int));
+                  cudaMalloc(&d_results, tableSize * sizeof(uint8_t));
+                  
+                  // Copy data to device
+                  cudaMemcpy(d_leftCol, leftColData.data(), tableSize * sizeof(int), cudaMemcpyHostToDevice);
+                  cudaMemcpy(d_rightCol, rightColData.data(), tableSize * sizeof(int), cudaMemcpyHostToDevice);
+                  
+                  cudaEvent_t start, stop;
+                  cudaEventCreate(&start);
+                  cudaEventCreate(&stop);
+                  cudaEventRecord(start);
+                  // Launch integer comparison kernel
+                  compareIntColumnsOmeTable<<<gridDim, blockDim>>>(
+                      d_leftCol, d_rightCol, tableSize, tableSize, d_results, opType);
+                  
+                      cudaEventRecord(stop);
+                      cudaEventSynchronize(stop);
+                      float elapsedTime;
+                      cudaEventElapsedTime(&elapsedTime, start, stop);
+                      std::cout << "Elapsed compareIntColumns time: " << elapsedTime << " milliseconds" << std::endl;
+                      cudaEventDestroy(start);
+                      cudaEventDestroy(stop);
+                      
+                  // Copy results back to host
+                  cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+                  
+                  // Free device memory
+                  cudaFree(d_leftCol);
+                  cudaFree(d_rightCol);
+                  cudaFree(d_results);
+              } else {
+                  // Handle string columns
+                  std::vector<std::string> leftColData(tableSize);
+                  std::vector<std::string> rightColData(tableSize);
+                  
+                  // Prepare column data
+                  for (int i = 0; i < tableSize; i++) {
+                      leftColData[i] = leftData[i][leftColIndex];
+                  }
+                  
+                  for (int i = 0; i < tableSize; i++) {
+                      rightColData[i] = rightData[i][rightColIndex];
+                  }
+                  
+                  // Create array of C-style strings on device
+                  char** h_leftStrings = new char*[tableSize];
+                  char** h_rightStrings = new char*[tableSize];
+                  
+                  // Allocate memory for each string on device
+                  for (int i = 0; i < tableSize; i++) {
+                      cudaMalloc(&h_leftStrings[i], leftColData[i].size() + 1);
+                      cudaMemcpy(h_leftStrings[i], leftColData[i].c_str(), 
+                                leftColData[i].size() + 1, cudaMemcpyHostToDevice);
+                  }
+                  
+                  for (int i = 0; i < tableSize; i++) {
+                      cudaMalloc(&h_rightStrings[i], rightColData[i].size() + 1);
+                      cudaMemcpy(h_rightStrings[i], rightColData[i].c_str(), 
+                                rightColData[i].size() + 1, cudaMemcpyHostToDevice);
+                  }
+                  
+                  // Copy arrays of pointers to device
+                  char** d_leftStrings, **d_rightStrings;
+                  uint8_t* d_results;
+                  
+                  cudaMalloc(&d_leftStrings, tableSize * sizeof(char*));
+                  cudaMalloc(&d_rightStrings, tableSize * sizeof(char*));
+                  cudaMalloc(&d_results, tableSize * sizeof(uint8_t));
+                  
+                  cudaMemcpy(d_leftStrings, h_leftStrings, tableSize * sizeof(char*), cudaMemcpyHostToDevice);
+                  cudaMemcpy(d_rightStrings, h_rightStrings, tableSize * sizeof(char*), cudaMemcpyHostToDevice);
+                  
+                  
+                  // Launch string comparison kernel
+          
+                  cudaEvent_t start, stop;
+                  cudaEventCreate(&start);
+                  cudaEventCreate(&stop);
+                  cudaEventRecord(start);
+          
+                  compareStringColumnsOneTable<<<gridDim, blockDim>>>(
+                      d_leftStrings, d_rightStrings, tableSize, tableSize, d_results, opType);
+                  
+                  cudaEventRecord(stop);
+                  cudaEventSynchronize(stop);
+                  float elapsedTime;
+                  cudaEventElapsedTime(&elapsedTime, start, stop);
+                  std::cout << "Elapsed time: " << elapsedTime << " milliseconds" << std::endl;
+                  cudaEventDestroy(start);
+                  cudaEventDestroy(stop);
+                  // Copy results back to host
+                  cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+                  
+                  // Free device memory
+                  for (int i = 0; i < tableSize; i++) {
+                      cudaFree(h_leftStrings[i]);
+                  }
+                  
+                  for (int i = 0; i < tableSize; i++) {
+                      cudaFree(h_rightStrings[i]);
+                  }
+                  
+                  cudaFree(d_leftStrings);
+                  cudaFree(d_rightStrings);
+                  cudaFree(d_results);
+                  
+                  delete[] h_leftStrings;
+                  delete[] h_rightStrings;
+              }
+          }
+          
+          
+          
+              }
     }
     
     return resultVector;
 }
 
-// Helper function to check if a string can be parsed as an integer
-bool isInteger(const std::string& str) {
-    if (str.empty()) return false;
-    
-    size_t start = 0;
-    if (str[0] == '-' || str[0] == '+') {
-        if (str.size() == 1) return false;
-        start = 1;
-    }
-    
-    for (size_t i = start; i < str.size(); i++) {
-        if (!std::isdigit(str[i])) return false;
-    }
-    
-    return true;
-}
+
 
 // Main function with both string and integer handling
 std::vector<uint8_t> GPUManager::processComparisonExpr(

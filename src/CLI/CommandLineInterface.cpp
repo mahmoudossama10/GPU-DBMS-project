@@ -113,7 +113,7 @@ void CommandLineInterface::processQuery(const std::string &query)
             std::cout << rows.size() << " rows returned\n";
 
             // Save full results to CSV
-            std::string outputPath = "data/output/query_output.csv";
+            std::string outputPath = "../../data/output/query_output.csv";
             CSVProcessor::saveCSV(outputPath, result->getHeaders(), result->getData());
             std::cout << "Saved output to '" << outputPath << "'\n";
 

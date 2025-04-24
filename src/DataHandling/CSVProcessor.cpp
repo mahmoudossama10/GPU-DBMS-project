@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <sys/stat.h>
 
-
 void ensureDirectoryExists(const std::string &dirPath)
 {
     struct stat info;
@@ -88,7 +87,7 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
 
 void CSVProcessor::saveCSV(const std::string &filepath, const std::vector<std::string> &headers, const std::vector<std::vector<std::string>> &rows)
 {
-    ensureDirectoryExists("data/output/");
+    ensureDirectoryExists("../../data/output/");
     std::ofstream out(filepath);
     if (!out.is_open())
     {

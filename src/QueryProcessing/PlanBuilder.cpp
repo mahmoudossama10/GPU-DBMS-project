@@ -211,43 +211,44 @@ std::shared_ptr<Table> GPUJoinPlan::execute()
         return table; // Return original table if no filter
     }
 
-    // Create a map to count how many conditions each table is involved in
-    std::unordered_map<std::string, int> table_count;
+    // // Create a map to count how many conditions each table is involved in
+    // std::unordered_map<std::string, int> table_count;
 
-    // Collect all table names present in the tables_ vector
-    std::unordered_set<std::string> table_names;
-    for (const auto &table : tables_)
-    {
-        table_names.insert(table->getName());
-    }
+    // // Collect all table names present in the tables_ vector
+    // std::unordered_set<std::string> table_names;
+    // for (const auto &table : tables_)
+    // {
+    //     table_names.insert(table->getName());
+    // }
 
-    // Count the number of conditions each table is involved in
-    std::vector<const hsql::Expr *> conditionList;
-    collectConditions(where_clause_, conditionList);
+    // // Count the number of conditions each table is involved in
+    // std::vector<const hsql::Expr *> conditionList;
+    // collectConditions(where_clause_, conditionList);
 
-    for (const auto *condition : conditionList)
-    {
-        std::unordered_set<std::string> involved_tables;
-        collectInvolvedTables(condition, involved_tables);
+    // for (const auto *condition : conditionList)
+    // {
+    //     std::unordered_set<std::string> involved_tables;
+    //     collectInvolvedTables(condition, involved_tables);
 
-        for (const auto &table_name : involved_tables)
-        {
-            if (table_names.count(table_name))
-            {
-                table_count[table_name]++;
-            }
-        }
-    }
+    //     for (const auto &table_name : involved_tables)
+    //     {
+    //         if (table_names.count(table_name))
+    //         {
+    //             table_count[table_name]++;
+    //         }
+    //     }
+    // }
 
-    // Sort tables_ in descending order based on their condition count
-    // Use stable_sort to maintain original order for tables with the same count
-    std::stable_sort(tables_.begin(), tables_.end(),
-                     [&](const std::shared_ptr<Table> &a, const std::shared_ptr<Table> &b)
-                     {
-                         return table_count[a->getName()] > table_count[b->getName()];
-                     });
+    // // Sort tables_ in descending order based on their condition count
+    // // Use stable_sort to maintain original order for tables with the same count
+    // std::stable_sort(tables_.begin(), tables_.end(),
+    //                  [&](const std::shared_ptr<Table> &a, const std::shared_ptr<Table> &b)
+    //                  {
+    //                      return table_count[a->getName()] > table_count[b->getName()];
+    //                  });
 
     std::shared_ptr<Table> result = tables_[0];
+
     for (size_t i = 1; i < tables_.size(); ++i)
     {
         result = gpu_manager_->executeJoin(result, tables_[i], where_clause_);
