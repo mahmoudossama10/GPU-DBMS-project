@@ -73,218 +73,233 @@ CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o: CMakeFiles/sql_
 CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/CLI/CommandLineInterface.cpp
 CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o -MF CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o.d -o CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/CLI/CommandLineInterface.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o -MF CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o.d -o CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/CLI/CommandLineInterface.cpp"
 
 CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/CLI/CommandLineInterface.cpp" > CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/CLI/CommandLineInterface.cpp" > CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.i
 
 CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/CLI/CommandLineInterface.cpp" -o CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/CLI/CommandLineInterface.cpp" -o CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.s
 
 CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/DataHandling/CSVProcessor.cpp
 CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o -MF CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o.d -o CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/CSVProcessor.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o -MF CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o.d -o CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/CSVProcessor.cpp"
 
 CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/CSVProcessor.cpp" > CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/CSVProcessor.cpp" > CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.i
 
 CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/CSVProcessor.cpp" -o CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/CSVProcessor.cpp" -o CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.s
 
 CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/DataHandling/StorageManager.cpp
 CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o -MF CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o.d -o CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/StorageManager.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o -MF CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o.d -o CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/StorageManager.cpp"
 
 CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/StorageManager.cpp" > CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/StorageManager.cpp" > CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.i
 
 CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/StorageManager.cpp" -o CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/StorageManager.cpp" -o CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.s
 
 CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/DataHandling/Table.cpp
 CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o -MF CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o.d -o CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/Table.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o -MF CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o.d -o CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/Table.cpp"
 
 CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/Table.cpp" > CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/Table.cpp" > CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.i
 
 CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/Table.cpp" -o CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/Table.cpp" -o CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.s
 
 CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/Aggregator.cpp
 CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Aggregator.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Aggregator.cpp"
 
 CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Aggregator.cpp" > CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Aggregator.cpp" > CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.i
 
 CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Aggregator.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Aggregator.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.s
 
 CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/Filter.cpp
 CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Filter.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Filter.cpp"
 
 CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Filter.cpp" > CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Filter.cpp" > CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.i
 
 CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Filter.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Filter.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.s
 
 CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/Join.cpp
 CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Join.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Join.cpp"
 
 CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Join.cpp" > CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Join.cpp" > CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.i
 
 CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Join.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Join.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.s
 
 CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/OrderBy.cpp
 CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/OrderBy.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/OrderBy.cpp"
 
 CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/OrderBy.cpp" > CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/OrderBy.cpp" > CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.i
 
 CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/OrderBy.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/OrderBy.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.s
 
 CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/Project.cpp
 CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Project.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o -MF CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Project.cpp"
 
 CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Project.cpp" > CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Project.cpp" > CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.i
 
 CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Project.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/Project.cpp" -o CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.s
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/ASTProcessor.cpp
 CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o.d -o CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/ASTProcessor.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o.d -o CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/ASTProcessor.cpp"
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/ASTProcessor.cpp" > CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/ASTProcessor.cpp" > CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.i
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/ASTProcessor.cpp" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/ASTProcessor.cpp" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.s
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/PlanBuilder.cpp
 CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o.d -o CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/PlanBuilder.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o.d -o CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/PlanBuilder.cpp"
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/PlanBuilder.cpp" > CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/PlanBuilder.cpp" > CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.i
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/PlanBuilder.cpp" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/PlanBuilder.cpp" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.s
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/QueryExecutor.cpp
 CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o.d -o CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/QueryExecutor.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o.d -o CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/QueryExecutor.cpp"
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/QueryExecutor.cpp" > CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/QueryExecutor.cpp" > CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.i
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/QueryExecutor.cpp" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/QueryExecutor.cpp" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.s
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/SubqueryHandler.cpp
 CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o.d -o CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/SubqueryHandler.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o.d -o CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/SubqueryHandler.cpp"
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/SubqueryHandler.cpp" > CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/SubqueryHandler.cpp" > CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.i
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/SubqueryHandler.cpp" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/SubqueryHandler.cpp" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.s
 
 CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Utilities/StringUtils.cpp
 CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o -MF CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Utilities/StringUtils.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o -MF CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o.d -o CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Utilities/StringUtils.cpp"
 
 CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Utilities/StringUtils.cpp" > CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Utilities/StringUtils.cpp" > CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.i
 
 CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Utilities/StringUtils.cpp" -o CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Utilities/StringUtils.cpp" -o CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.s
 
 CMakeFiles/sql_processor.dir/src/main.cpp.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/main.cpp.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/main.cpp
 CMakeFiles/sql_processor.dir/src/main.cpp.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/sql_processor.dir/src/main.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/main.cpp.o -MF CMakeFiles/sql_processor.dir/src/main.cpp.o.d -o CMakeFiles/sql_processor.dir/src/main.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/main.cpp"
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/main.cpp.o -MF CMakeFiles/sql_processor.dir/src/main.cpp.o.d -o CMakeFiles/sql_processor.dir/src/main.cpp.o -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/main.cpp"
 
 CMakeFiles/sql_processor.dir/src/main.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/sql_processor.dir/src/main.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/main.cpp" > CMakeFiles/sql_processor.dir/src/main.cpp.i
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/main.cpp" > CMakeFiles/sql_processor.dir/src/main.cpp.i
 
 CMakeFiles/sql_processor.dir/src/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/sql_processor.dir/src/main.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/main.cpp" -o CMakeFiles/sql_processor.dir/src/main.cpp.s
+	/usr/bin/g++-12 $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/main.cpp" -o CMakeFiles/sql_processor.dir/src/main.cpp.s
+
+CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o: CMakeFiles/sql_processor.dir/flags.make
+CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o: CMakeFiles/sql_processor.dir/includes_CUDA.rsp
+CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/GPUAggregator.cu
+CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_16) "Building CUDA object CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o"
+	/usr/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o -MF CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o.d -x cu -rdc=true -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/GPUAggregator.cu" -o CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o
+
+CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CUDA source to CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.i"
+	$(CMAKE_COMMAND) -E cmake_unimplemented_variable CMAKE_CUDA_CREATE_PREPROCESSED_SOURCE
+
+CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CUDA source to assembly CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.s"
+	$(CMAKE_COMMAND) -E cmake_unimplemented_variable CMAKE_CUDA_CREATE_ASSEMBLY_SOURCE
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o: CMakeFiles/sql_processor.dir/flags.make
 CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o: CMakeFiles/sql_processor.dir/includes_CUDA.rsp
 CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o: /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/GPU.cu
 CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o: CMakeFiles/sql_processor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_16) "Building CUDA object CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o"
-	/usr/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o.d -x cu -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/GPU.cu" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_17) "Building CUDA object CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o"
+	/usr/bin/nvcc -forward-unknown-to-host-compiler $(CUDA_DEFINES) $(CUDA_INCLUDES) $(CUDA_FLAGS) -MD -MT CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o -MF CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o.d -x cu -rdc=true -c "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/GPU.cu" -o CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o
 
 CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CUDA source to CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.i"
@@ -311,6 +326,59 @@ sql_processor_OBJECTS = \
 "CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o" \
 "CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o" \
 "CMakeFiles/sql_processor.dir/src/main.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o" \
+"CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o"
+
+# External object files for target sql_processor
+sql_processor_EXTERNAL_OBJECTS =
+
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/main.cpp.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/build.make
+CMakeFiles/sql_processor.dir/cmake_device_link.o: /usr/lib/x86_64-linux-gnu/libcudart.so
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/deviceLinkLibs.rsp
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/deviceObjects1.rsp
+CMakeFiles/sql_processor.dir/cmake_device_link.o: CMakeFiles/sql_processor.dir/dlink.txt
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_18) "Linking CUDA device code CMakeFiles/sql_processor.dir/cmake_device_link.o"
+	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/sql_processor.dir/dlink.txt --verbose=$(VERBOSE)
+
+# Rule to build all files generated by this target.
+CMakeFiles/sql_processor.dir/build: CMakeFiles/sql_processor.dir/cmake_device_link.o
+.PHONY : CMakeFiles/sql_processor.dir/build
+
+# Object files for target sql_processor
+sql_processor_OBJECTS = \
+"CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/DataHandling/StorageManager.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/Operations/Project.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/QueryProcessing/ASTProcessor.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/QueryProcessing/PlanBuilder.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecutor.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/main.cpp.o" \
+"CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o" \
 "CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o"
 
 # External object files for target sql_processor
@@ -331,10 +399,13 @@ bin/sql_processor: CMakeFiles/sql_processor.dir/src/QueryProcessing/QueryExecuto
 bin/sql_processor: CMakeFiles/sql_processor.dir/src/QueryProcessing/SubqueryHandler.cpp.o
 bin/sql_processor: CMakeFiles/sql_processor.dir/src/Utilities/StringUtils.cpp.o
 bin/sql_processor: CMakeFiles/sql_processor.dir/src/main.cpp.o
+bin/sql_processor: CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o
 bin/sql_processor: CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o
 bin/sql_processor: CMakeFiles/sql_processor.dir/build.make
+bin/sql_processor: /usr/lib/x86_64-linux-gnu/libcudart.so
+bin/sql_processor: CMakeFiles/sql_processor.dir/cmake_device_link.o
 bin/sql_processor: CMakeFiles/sql_processor.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_17) "Linking CXX executable bin/sql_processor"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_19) "Linking CXX executable bin/sql_processor"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/sql_processor.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

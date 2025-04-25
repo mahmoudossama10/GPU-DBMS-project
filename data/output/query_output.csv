@@ -1,8 +1,11 @@
-e.emp_id_P,e.name,e.id_id,e.age,d.dept_id_P,d.dept_name
-1,Alice,101,20,101,Engineering
-2,Bob,102,25,102,HR
-3,Charlie,101,30,101,Engineering
-4,David,103,35,103,Marketing
-5,Eve,102,22,102,HR
-6,Eve,102,50,102,HR
-7,Eve,102,40,102,HR
+project_id_P,project_name,start_year,department_id_P,department_name
+1,Project Beta 882,2018,1,HR
+2,Project Gamma 507,2022,2,Engineering
+3,Project Epsilon 231,2018,1,HR
+4,Project Delta 589,2018,2,Engineering
+5,Project Alpha 614,2016,1,HR
+6,Project Zeta 894,2017,2,Engineering
+7,Project Alpha 815,2017,1,HR
+8,Project Gamma 805,2010,2,Engineering
+9,Project Zeta 315,2019,1,HR
+10,Project Alpha 433,2019,2,Engineering

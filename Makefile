@@ -1,67 +1,43 @@
-# Compilers
+# ====== Paths ======
 CXX := g++
 NVCC := nvcc
+CUDA_PATH := /usr/local/cuda
+INCLUDE_DIRS := -Iinclude -Isql-parser-main/src
+LIB_DIRS := -Lsql-parser-main/build -L$(CUDA_PATH)/lib64
 
-# Flags
-CXXFLAGS := -std=c++17 -Wall -Wextra -Iinclude -I/sql-parser-main/src
-NVCCFLAGS := -std=c++14 -Iinclude -I/sql-parser-main/src
-LDFLAGS := -L/sql-parser-main/build -lsqlparser -lcudart -L/usr/local/cuda/lib64 -lstdc++fs
+# ====== Sources ======
+CPP_SOURCES := $(shell find src -name '*.cpp')
+CU_SOURCES  := $(shell find src -name '*.cu')
+OBJECTS := $(CPP_SOURCES:.cpp=.o) $(CU_SOURCES:.cu=.o)
+EXEC := bin/sql_processor
 
-# Directories
-SRC_DIR := src
-BUILD_DIR := build
-BIN_DIR := bin
+# ====== Flags ======
+CXXFLAGS := -std=c++14 -Wall -Wextra $(INCLUDE_DIRS)
+NVCCFLAGS := -std=c++14 -Xcompiler "-Wall -Wextra" $(INCLUDE_DIRS)
+LDFLAGS := $(LIB_DIRS) -lsqlparser -lcudart
 
-# Source files
-CPP_SRCS := $(wildcard $(SRC_DIR)/*.cpp) \
-            $(wildcard $(SRC_DIR)/DataHandling/*.cpp) \
-            $(wildcard $(SRC_DIR)/Operations/*.cpp) \
-            $(wildcard $(SRC_DIR)/QueryProcessing/*.cpp) \
-            $(wildcard $(SRC_DIR)/Utilities/*.cpp) \
-            $(wildcard $(SRC_DIR)/CLI/*.cpp)
+# Create bin directory if necessary
+$(shell mkdir -p bin)
 
-CU_SRCS := $(wildcard $(SRC_DIR)/QueryProcessing/*.cu)
+# ====== Rules ======
 
-# Object files
-CPP_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(CPP_SRCS))
-CU_OBJS := $(patsubst $(SRC_DIR)/%.cu,$(BUILD_DIR)/%.o,$(CU_SRCS))
+all: $(EXEC)
 
-OBJS := $(CPP_OBJS) $(CU_OBJS)
-
-# Final executable
-TARGET := $(BIN_DIR)/sql_processor
-
-# Default target
-all: directories $(TARGET)
-
-# Create necessary directories
-directories:
-	@mkdir -p $(BUILD_DIR)/DataHandling
-	@mkdir -p $(BUILD_DIR)/Operations
-	@mkdir -p $(BUILD_DIR)/QueryProcessing
-	@mkdir -p $(BUILD_DIR)/Utilities
-	@mkdir -p $(BUILD_DIR)/CLI
-	@mkdir -p $(BIN_DIR)
-
-# Link final binary
-$(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
-
-# Compile .cpp files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+# Rule to build C++ objects
+src/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Compile .cu files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cu
+# Rule to build CUDA objects
+src/%.o: src/%.cu
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-# Clean build
+$(EXEC): $(OBJECTS)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+run: $(EXEC)
+	./$(EXEC)
+
 clean:
-	rm -rf $(BUILD_DIR) $(BIN_DIR)
+	rm -rf src/*.o bin/sql_processor
 
-# Run binary
-run: all
-	./$(TARGET)
-
-# Mark targets as phony
-.PHONY: all clean run directories
+.PHONY: all clean run

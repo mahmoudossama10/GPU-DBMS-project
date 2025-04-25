@@ -6,15 +6,15 @@
 #include <filesystem>
 #include <sys/stat.h>
 
-void ensureDirectoryExists(const std::string &dirPath) {
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    // create_directories will recursively create all missing parents.
-    if (!fs::create_directories(dirPath, ec) && ec) {
-        throw std::runtime_error(
-          "Failed to create directory '" + dirPath + "': " + ec.message());
-    }
-}
+// void ensureDirectoryExists(const std::string &dirPath) {
+//     namespace fs = std::filesystem;
+//     std::error_code ec;
+//     // create_directories will recursively create all missing parents.
+//     if (!fs::create_directories(dirPath, ec) && ec) {
+//         throw std::runtime_error(
+//           "Failed to create directory '" + dirPath + "': " + ec.message());
+//     }
+// }
 
 CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 {
@@ -85,7 +85,7 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
 
 void CSVProcessor::saveCSV(const std::string &filepath, const std::vector<std::string> &headers, const std::vector<std::vector<std::string>> &rows)
 {
-    ensureDirectoryExists("../../data/output/");
+    //ensureDirectoryExists("../../data/output/");
     std::ofstream out(filepath);
     if (!out.is_open())
     {

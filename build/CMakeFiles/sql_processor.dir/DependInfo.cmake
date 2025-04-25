@@ -8,6 +8,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/Operations/GPUAggregator.cu" "CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o" "gcc" "CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o.d"
   "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/QueryProcessing/GPU.cu" "CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o" "gcc" "CMakeFiles/sql_processor.dir/src/QueryProcessing/GPU.cu.o.d"
   "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/CLI/CommandLineInterface.cpp" "CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o" "gcc" "CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o.d"
   "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/src/DataHandling/CSVProcessor.cpp" "CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o" "gcc" "CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o.d"
