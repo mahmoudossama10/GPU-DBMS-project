@@ -4,11 +4,8 @@
 #include <algorithm>
 #include <cstring>
 #include <cuda_runtime.h>
-#include <math.h>
-#include <chrono>
-#include <iostream>
+
 // CUDA kernels
-const int GPUManager::BATCH_SIZE = 500;
 
 // Helper for string comparison on device
 __device__ int strcmp_device(const char* str1, const char* str2) {
@@ -20,76 +17,6 @@ __device__ int strcmp_device(const char* str1, const char* str2) {
 }
 
 
-
-// Updated kernel to handle full batch size
-__global__ void evaluateComparisonBatch(
-    const int* leftColumn,
-    const int* rightColumn,
-    const int* tableSizes,
-    int numTables,
-    int leftTableIdx,
-    int rightTableIdx,
-    int opType,
-    uint8_t* results,
-    int batchSize)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    if (idx < batchSize) {
-        // Calculate indices for each table from the flattened index
-        int indices[32]; // Assuming maximum 32 tables
-        int remainingIdx = idx;
-        
-        // Convert linear index to multi-dimensional indices
-        for (int t = 0; t < numTables; t++) {
-            int tableSize = tableSizes[t];
-            indices[t] = remainingIdx % tableSize;
-            remainingIdx /= tableSize;
-        }
-
-        // Get the actual values to compare from the specific tables
-        int leftValue = leftColumn[indices[leftTableIdx]];
-        int rightValue = rightColumn[indices[rightTableIdx]];
-
-        // // Print the indices and values for debugging
-        // printf("Thread %d: leftTableIdx=%d, rightTableIdx=%d\n", idx, leftTableIdx, rightTableIdx);
-        // printf("Thread %d: indices = [", idx);
-        // for (int t = 0; t < numTables; t++) {
-        //     printf("%d ", indices[t]);
-        // }
-        // printf("]\n");
-        // printf("Thread %d: leftValue = %d, rightValue = %d\n", idx, leftValue, rightValue);
-        
-        // Evaluate the comparison based on operation type
-        uint8_t match = 0;
-        switch (opType) {
-            case 0: // Equals
-                match = (leftValue == rightValue) ? 1 : 0;
-                break;
-            case 1: // Not Equals
-                match = (leftValue != rightValue) ? 1 : 0;
-                break;
-            case 2: // Less Than
-                match = (leftValue < rightValue) ? 1 : 0;
-                break;
-            case 3: // Greater Than
-                match = (leftValue > rightValue) ? 1 : 0;
-                break;
-            case 4: // Less Than or Equals
-                match = (leftValue <= rightValue) ? 1 : 0;
-                break;
-            case 5: // Greater Than or Equals
-                match = (leftValue >= rightValue) ? 1 : 0;
-                break;
-        }
-
-        // // Print the match result
-        // printf("Thread %d: match = %d\n", idx, match);
-        
-        // Store the result
-        results[idx] = match;
-    }
-}
 
 
 __global__ void compareStringColumns(
@@ -171,17 +98,14 @@ __global__ void compareStringColumnsOneTable(
    }
 }
 
+
 __global__ void compareIntColumns(
-    const int* leftColumn, 
-    const int* rightColumn,
+     int* leftColumn, 
+     int* rightColumn,
     int leftSize, 
     int rightSize,
     uint8_t* results, 
-    int opType,
-    const int* tableSizes,  // Array containing sizes of all tables
-    int numTables,          // Total number of tables
-    int leftTableIdx,       // Index of left table in the tables array
-    int rightTableIdx)      // Index of right table in the tables array
+    int opType) 
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
@@ -189,7 +113,6 @@ __global__ void compareIntColumns(
     if (i < leftSize && j < rightSize) {
         uint8_t match = 0;
         
-        // Compare the values based on the operation type
         switch (opType) {
             case 0: // Equals
                 match = (leftColumn[i] == rightColumn[j]) ? 1 : 0;
@@ -211,33 +134,10 @@ __global__ void compareIntColumns(
                 break;
         }
         
-        // Calculate the output index in the flattened result array for multiple tables
-        // We need to compute the position in the N-dimensional space and flatten it
-        
-        // First, initialize the indices for each table dimension
-        int indices[32]; // Assuming maximum 32 tables, adjust as needed
-        for (int t = 0; t < numTables; t++) {
-            indices[t] = 0;
-        }
-        
-        // Set the actual indices for the tables involved in the comparison
-        indices[leftTableIdx] = i;
-        indices[rightTableIdx] = j;
-        
-        // Calculate the flattened index
-        int flatIndex = 0;
-        int stride = 1;
-        
-        // Calculate the flattened index using row-major ordering
-        for (int t = numTables - 1; t >= 0; t--) {
-            flatIndex += indices[t] * stride;
-            stride *= tableSizes[t];
-        }
-        
-        // Store the result at the calculated position
-        results[flatIndex] = match;
+        results[i * rightSize + j] = match;
     }
 }
+
 
 __global__ void compareIntColumnsOmeTable(
     int* leftColumn, 
@@ -316,7 +216,7 @@ __global__ void compareIntWithConstant(
 // New kernel that uses the improved string storage approach
 __global__ void compareStringWithConstantImproved(
     const char* stringBuffer,
-    const int* stringOffsets,
+    const size_t* stringOffsets,
     const char* constant,
     int size,
     uint8_t* results,
@@ -399,13 +299,13 @@ GPUManager::GPUManager() {
 bool isInteger(const std::string& str) {
     if (str.empty()) return false;
     
-    int start = 0;
+    size_t start = 0;
     if (str[0] == '-' || str[0] == '+') {
         if (str.size() == 1) return false;
         start = 1;
     }
     
-    for (int i = start; i < str.size(); i++) {
+    for (size_t i = start; i < str.size(); i++) {
         if (!std::isdigit(str[i])) return false;
     }
     
@@ -423,11 +323,11 @@ bool GPUManager::isGPUAvailable() const {
 int GPUManager::findColumnIndex(const Table& table, const char* columnName, const char* tableName) {
     const auto& headers = table.getHeaders();
     
-    for (int i = 0; i < headers.size(); i++) {
+    for (size_t i = 0; i < headers.size(); i++) {
         // If table name is specified, check for "tableName.columnName" format
         if (tableName) {
             std::string fullColumnName = std::string(tableName) + "." + std::string(columnName);
-            if (headers[i] == fullColumnName || (headers[i] == std::string(columnName) && table.getAlias() == tableName)|| (headers[i] == std::string(columnName) && table.getName() == tableName)) {
+            if (headers[i] == fullColumnName || headers[i] == std::string(columnName)) {
                 return static_cast<int>(i);
             }
         } 
@@ -531,7 +431,7 @@ std::vector<std::vector<std::string>> GPUManager::mergeFilterResults(
     std::vector<std::vector<std::string>> result;
     
     #pragma omp parallel for
-    for (int i = 0; i < mask.size(); ++i) {
+    for (size_t i = 0; i < mask.size(); ++i) {
         if (mask[i]) {
             #pragma omp critical
             result.push_back(table.getRow(i));
@@ -564,14 +464,14 @@ std::vector<std::vector<std::string>> GPUManager::mergeJoinResults(
     const std::vector<uint8_t>& mask) const {
     
     std::vector<std::vector<std::string>> result;
-    const int rightSize = right.getSize();
+    const size_t rightSize = right.getSize();
     
     #pragma omp parallel for
-    for (int idx = 0; idx < mask.size(); ++idx) {
+    for (size_t idx = 0; idx < mask.size(); ++idx) {
         if (mask[idx]) {
             // Calculate row indices
-            const int leftIdx = idx / rightSize;
-            const int rightIdx = idx % rightSize;
+            const size_t leftIdx = idx / rightSize;
+            const size_t rightIdx = idx % rightSize;
             
             // Combine rows
             auto combined = left.getRow(leftIdx);
@@ -652,15 +552,15 @@ std::vector<uint8_t> GPUManager::gpuFilterTable(
             // For string comparison
             else if (conditions->expr2->type == hsql::kExprLiteralString) {
                 const char* constant = conditions->expr2->name;
-                int constantLen = strlen(constant) + 1; // +1 for null terminator
+                size_t constantLen = strlen(constant) + 1; // +1 for null terminator
                 
                 // Get string data from the table
                 const auto& data = table.getData();
                 
                 // Calculate total buffer size needed for all strings
-                int totalBufferSize = 0;
-                std::vector<int> stringLengths(tableSize);
-                std::vector<int> stringOffsets(tableSize);
+                size_t totalBufferSize = 0;
+                std::vector<size_t> stringLengths(tableSize);
+                std::vector<size_t> stringOffsets(tableSize);
                 
                 for (int i = 0; i < tableSize; i++) {
                     stringLengths[i] = data[i][columnIndex].length() + 1; // +1 for null terminator
@@ -678,16 +578,16 @@ std::vector<uint8_t> GPUManager::gpuFilterTable(
                 
                 // Allocate device memory
                 char* d_stringBuffer;
-                int* d_stringOffsets;
+                size_t* d_stringOffsets;
                 char* d_constant;
                 
                 cudaMalloc(&d_stringBuffer, totalBufferSize);
-                cudaMalloc(&d_stringOffsets, tableSize * sizeof(int));
+                cudaMalloc(&d_stringOffsets, tableSize * sizeof(size_t));
                 cudaMalloc(&d_constant, constantLen);
                 
                 // Copy data to device
                 cudaMemcpy(d_stringBuffer, stringBuffer, totalBufferSize, cudaMemcpyHostToDevice);
-                cudaMemcpy(d_stringOffsets, stringOffsets.data(), tableSize * sizeof(int), cudaMemcpyHostToDevice);
+                cudaMemcpy(d_stringOffsets, stringOffsets.data(), tableSize * sizeof(size_t), cudaMemcpyHostToDevice);
                 cudaMemcpy(d_constant, constant, constantLen, cudaMemcpyHostToDevice);
                 
                 // Launch kernel with improved string handling
@@ -981,8 +881,8 @@ std::vector<uint8_t> GPUManager::processComparisonExpr(
             cudaEventCreate(&stop);
             cudaEventRecord(start);
             // Launch integer comparison kernel
-            // compareIntColumns<<<gridDim, blockDim>>>(
-            //     d_leftCol, d_rightCol, leftSize, rightSize, d_results, opType);
+            compareIntColumns<<<gridDim, blockDim>>>(
+                d_leftCol, d_rightCol, leftSize, rightSize, d_results, opType);
             
                 cudaEventRecord(stop);
                 cudaEventSynchronize(stop);
@@ -1133,385 +1033,4 @@ std::vector<uint8_t> GPUManager::processBinaryExpr(
     // Default case - no conditions
     int resultSize = leftTable.getSize() * rightTable.getSize();
     return std::vector<uint8_t>(resultSize, 1);  // 1 means true
-}
-
-
-
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-///////////////////////////////////////////
-
-
-std::shared_ptr<Table> GPUManager::executeBatchedJoin(
-    const std::vector<std::shared_ptr<Table>>& tables,
-    const hsql::Expr* joinConditions) {
-    
-    if (!hasGPU_) {
-        throw std::runtime_error("GPU operations not available");
-    }
-    
-    std::vector<std::vector<std::string>> resultData;
-    
-    // Calculate total number of combinations
-    int totalCombinations = 1;
-    std::vector<int> tableSizes;
-    for (const auto& table : tables) {
-        tableSizes.push_back(table->getSize());
-        totalCombinations *= table->getSize();
-    }
-    
-    // Initialize batch indices for each table
-    std::vector<std::vector<int>> batchIndices(tables.size());
-    
-    // Process in batches
-    for (int t0 = 0; t0 < tableSizes[0]; t0 += BATCH_SIZE) {
-        int batchSize0 = std::min(BATCH_SIZE, tableSizes[0] - t0);
-        batchIndices[0].clear();
-        
-        for (int i = 0; i < batchSize0; i++) {
-            batchIndices[0].push_back(t0 + i);
-        }
-        
-        // Process batches for table 1 and beyond recursively
-        processBatchesRecursive(tables, batchIndices, joinConditions, resultData, 1);
-    }
-    
-    // Create result table
-    return std::make_shared<Table>(
-        "joined_result",
-        combineMultipleHeaders(tables),
-        resultData
-    );
-}
-
-// Helper method to recursively process batches across multiple tables
-void GPUManager::processBatchesRecursive(
-    const std::vector<std::shared_ptr<Table>>& tables,
-    std::vector<std::vector<int>>& batchIndices,
-    const hsql::Expr* joinConditions,
-    std::vector<std::vector<std::string>>& resultData,
-    int tableIndex) {
-    
-    // Base case: processed all tables in this batch combination
-    if (tableIndex >= tables.size()) {
-        // Process this specific batch combination
-auto startProcess = std::chrono::high_resolution_clock::now();
-auto batchResults = processBatch(tables, batchIndices, joinConditions);
-auto endProcess = std::chrono::high_resolution_clock::now();
-std::chrono::duration<double, std::milli> processTime = endProcess - startProcess;
-std::cout << "processBatch time: " << processTime.count() << " ms" << std::endl;
-
-// Extract matching rows from the batch
-auto startFilter = std::chrono::high_resolution_clock::now();
-std::vector<std::vector<int>> selectedCombinations;
-int totalBatchSize = 1;
-for (const auto& indices : batchIndices) {
-    totalBatchSize *= indices.size();
-}
-
-// Find all combinations that matched (where batchResults[i] == 1)
-for (int i = 0; i < totalBatchSize; i++) {
-    if (batchResults[i] == 1) {
-        std::vector<int> combination;
-        int index = i;
-        for (int t = batchIndices.size() - 1; t >= 0; t--) {
-            int tableSize = batchIndices[t].size();
-            combination.insert(combination.begin(), batchIndices[t][index % tableSize]);
-            index /= tableSize;
-        }
-        selectedCombinations.push_back(combination);
-    }
-}
-auto endFilter = std::chrono::high_resolution_clock::now();
-std::chrono::duration<double, std::milli> filterTime = endFilter - startFilter;
-std::cout << "Filtering matches time: " << filterTime.count() << " ms" << std::endl;
-
-// Merge selected rows into result
-auto startMerge = std::chrono::high_resolution_clock::now();
-auto batchData = mergeBatchResults(tables, selectedCombinations);
-resultData.insert(resultData.end(), batchData.begin(), batchData.end());
-auto endMerge = std::chrono::high_resolution_clock::now();
-std::chrono::duration<double, std::milli> mergeTime = endMerge - startMerge;
-std::cout << "Merging results time: " << mergeTime.count() << " ms" << std::endl;
-        return;
-    }
-    
-    // Recursive case: process next table in batches
-    int tableSize = tables[tableIndex]->getSize();
-    for (int t = 0; t < tableSize; t += BATCH_SIZE) {
-        int batchSize = std::min(BATCH_SIZE, tableSize - t);
-        
-        // Set up indices for this batch of the current table
-        batchIndices[tableIndex].clear();
-        for (int i = 0; i < batchSize; i++) {
-            batchIndices[tableIndex].push_back(t + i);
-        }
-        
-        // Process next table
-        processBatchesRecursive(tables, batchIndices, joinConditions, resultData, tableIndex + 1);
-    }
-}
-
-// Process a specific batch combination across all tables
-std::vector<uint8_t> GPUManager::processBatch(
-    const std::vector<std::shared_ptr<Table>>& tables,
-    const std::vector<std::vector<int>>& batchIndices,
-    const hsql::Expr* conditions) {
-    
-    // Calculate batch size
-    int batchSize = 1;
-    for (const auto& indices : batchIndices) {
-        batchSize *= indices.size();
-    }
-    
-    // Initialize all results to 1 (true)
-    std::vector<uint8_t> results(batchSize, 1);
-    
-    // Base case: no conditions
-    if (!conditions) {
-        return results;
-    }
-    
-    // Process conditions based on operation type
-    if (conditions->type == hsql::kExprOperator) {
-        if (conditions->opType == hsql::OperatorType::kOpAnd || 
-            conditions->opType == hsql::OperatorType::kOpOr) {
-            // Combine binary operations (AND/OR)
-            auto leftResults = processBatch(tables, batchIndices, conditions->expr);
-            auto rightResults = processBatch(tables, batchIndices, conditions->expr2);
-            
-            // Combine results on GPU
-            uint8_t *d_leftResults, *d_rightResults, *d_output;
-            cudaMalloc(&d_leftResults, batchSize * sizeof(uint8_t));
-            cudaMalloc(&d_rightResults, batchSize * sizeof(uint8_t));
-            cudaMalloc(&d_output, batchSize * sizeof(uint8_t));
-            
-            cudaMemcpy(d_leftResults, leftResults.data(), batchSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
-            cudaMemcpy(d_rightResults, rightResults.data(), batchSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
-            
-            int blockSize = 256;
-            int numBlocks = (batchSize + blockSize - 1) / blockSize;
-            
-            uint8_t isAnd = conditions->opType == hsql::OperatorType::kOpAnd ? 1 : 0;
-            combineResults<<<numBlocks, blockSize>>>(d_leftResults, d_rightResults, d_output, batchSize, isAnd);
-            
-            cudaMemcpy(results.data(), d_output, batchSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-            
-            cudaFree(d_leftResults);
-            cudaFree(d_rightResults);
-            cudaFree(d_output);
-        } else {
-            // Process simple comparison between columns
-            results = evaluateConditionOnBatch(tables, batchIndices, conditions);
-        }
-    }
-    
-    return results;
-}
-// Evaluate a comparison condition on the current batch
-std::vector<uint8_t> GPUManager::evaluateConditionOnBatch(
-    const std::vector<std::shared_ptr<Table>>& tables,
-    const std::vector<std::vector<int>>& batchIndices,
-    const hsql::Expr* condition) {
-    
-    // Calculate total batch size (cartesian product of all tables)
-    int batchSize = 1;
-    for (const auto& indices : batchIndices) {
-        batchSize *= indices.size();
-    }
-    
-    // Default to all true
-    std::vector<uint8_t> results(batchSize, 1);
-    
-    // We'll focus on implementing integer column-column comparison for now
-    if (condition->type == hsql::kExprOperator && 
-        condition->expr->type == hsql::kExprColumnRef && 
-        condition->expr2->type == hsql::kExprColumnRef) {
-        
-        // Find which tables and columns are involved
-        int leftTableIdx = -1, rightTableIdx = -1;
-        int leftColIdx = -1, rightColIdx = -1;
-        
-        // Identify tables and columns involved in this condition
-        for (int i = 0; i < tables.size(); i++) {
-            int col = findColumnIndex(*tables[i], condition->expr->name, condition->expr->table);
-            if (col != -1) {
-                leftTableIdx = i;
-                leftColIdx = col;
-            }
-            
-            col = findColumnIndex(*tables[i], condition->expr2->name, condition->expr2->table);
-            if (col != -1) {
-                rightTableIdx = i;
-                rightColIdx = col;
-            }
-        }
-        
-        // If we couldn't find the columns, return all true
-        if (leftTableIdx == -1 || rightTableIdx == -1 || leftColIdx == -1 || rightColIdx == -1) {
-            return results;
-        }
-        
-        // Get operator type
-        int opType;
-        switch (condition->opType) {
-            case hsql::OperatorType::kOpEquals: opType = 0; break;
-            case hsql::OperatorType::kOpNotEquals: opType = 1; break;
-            case hsql::OperatorType::kOpLess: opType = 2; break;
-            case hsql::OperatorType::kOpGreater: opType = 3; break;
-            case hsql::OperatorType::kOpLessEq: opType = 4; break;
-            case hsql::OperatorType::kOpGreaterEq: opType = 5; break;
-            default: throw std::runtime_error("Unsupported operator type");
-        }
-        
-        // Check if columns are integers
-        const auto& leftTable = tables[leftTableIdx];
-        const auto& rightTable = tables[rightTableIdx];
-        const auto& leftData = leftTable->getData();
-        const auto& rightData = rightTable->getData();
-        
-        // Check first row to determine if integers
-        if (leftData.empty() || rightData.empty() || 
-            !isInteger(leftData[0][leftColIdx]) || !isInteger(rightData[0][rightColIdx])) {
-            // Not integer columns, will implement string comparison in future
-            return results;
-        }
-        
-        // Extract the batch data for the columns we need to compare
-        int leftBatchSize = batchIndices[leftTableIdx].size();
-        int rightBatchSize = batchIndices[rightTableIdx].size();
-        
-        std::vector<int> leftColData(leftBatchSize);
-        std::vector<int> rightColData(rightBatchSize);
-        
-        for (int i = 0; i < leftBatchSize; i++) {
-            int rowIdx = batchIndices[leftTableIdx][i];
-            leftColData[i] = std::stoi(leftData[rowIdx][leftColIdx]);
-        }
-        
-        for (int i = 0; i < rightBatchSize; i++) {
-            int rowIdx = batchIndices[rightTableIdx][i];
-            rightColData[i] = std::stoi(rightData[rowIdx][rightColIdx]);
-        }
-        
-        // Allocate device memory
-        int *d_leftCol, *d_rightCol;
-        uint8_t *d_results;
-        
-        cudaMalloc(&d_leftCol, leftBatchSize * sizeof(int));
-        cudaMalloc(&d_rightCol, rightBatchSize * sizeof(int));
-        cudaMalloc(&d_results, batchSize * sizeof(uint8_t));
-        
-        // Initialize results to 1 (true)
-        cudaMemset(d_results, 1, batchSize * sizeof(uint8_t));
-        
-        // Copy data to device
-        cudaMemcpy(d_leftCol, leftColData.data(), leftBatchSize * sizeof(int), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_rightCol, rightColData.data(), rightBatchSize * sizeof(int), cudaMemcpyHostToDevice);
-        
-        // Create table indices information to help with mapping
-        std::vector<int> tableSizes;
-        for (const auto& indices : batchIndices) {
-            tableSizes.push_back(indices.size());
-        }
-        
-        // Allocate and copy table sizes to device
-        int* d_tableSizes;
-        cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
-        cudaMemcpy(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice);
-        
-        // Calculate threads needed for the entire batch
-        int threadsNeeded = batchSize;
-        
-        // Configure kernel execution parameters
-        // Each thread will handle one combination in the cartesian product
-        int blockSize = 256; // Can be tuned based on your GPU
-        int gridSize = (threadsNeeded + blockSize - 1) / blockSize;
-        
-//         cudaEvent_t start, stop;
-// cudaEventCreate(&start);
-// cudaEventCreate(&stop);
-
-// // Record the start event
-// cudaEventRecord(start, 0);
-
-        // Launch kernel to evaluate the condition on the entire batch
-        evaluateComparisonBatch<<<gridSize, blockSize>>>(
-            d_leftCol, d_rightCol, 
-            d_tableSizes, tables.size(),
-            leftTableIdx, rightTableIdx,
-            opType, d_results, batchSize);
-        
-        // Copy results back to host
-        cudaMemcpy(results.data(), d_results, batchSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-
-   cudaDeviceSynchronize();
-// cudaEventRecord(stop, 0);
-// cudaEventSynchronize(stop);
-// float milliseconds = 0;
-// cudaEventElapsedTime(&milliseconds, start, stop);
-
-// // Print the time taken
-// std::cout << "Kernel execution time: " << milliseconds << " ms" << std::endl;
-        // Free device memory
-        cudaFree(d_leftCol);
-        cudaFree(d_rightCol);
-        cudaFree(d_results);
-        cudaFree(d_tableSizes);
-    }
-    
-    return results;
-}
-
-// Method to combine headers from multiple tables
-std::vector<std::string> GPUManager::combineMultipleHeaders(
-    const std::vector<std::shared_ptr<Table>>& tables) {
-    
-    std::vector<std::string> headers;
-    
-    for (const auto& table : tables) {
-        const auto& tableHeaders = table->getHeaders();
-        const std::string& alias = table->getAlias();
-        
-        for (const auto& header : tableHeaders) {
-            headers.push_back(alias.empty() ? header : alias + "." + header);
-        }
-    }
-    
-    return headers;
-}
-
-// Method to merge rows from tables based on selected indices
-std::vector<std::vector<std::string>> GPUManager::mergeBatchResults(
-    const std::vector<std::shared_ptr<Table>>& tables,
-    const std::vector<std::vector<int>>& selectedIndices) {
-    
-    std::vector<std::vector<std::string>> results;
-    
-    for (const auto& combination : selectedIndices) {
-        std::vector<std::string> mergedRow;
-        
-        for (int t = 0; t < tables.size(); t++) {
-            const auto& row = tables[t]->getRow(combination[t]);
-            mergedRow.insert(mergedRow.end(), row.begin(), row.end());
-        }
-        
-        results.push_back(mergedRow);
-    }
-    
-    return results;
 }

@@ -14,6 +14,8 @@ class GPUManager
 public:
     GPUManager();
     ~GPUManager();
+    static const int BATCH_SIZE;
+    
 
     // Join two tables with conditions on GPU
     // Returns a vector of booleans indicating which row combinations match
@@ -60,6 +62,11 @@ public:
     // Check if GPU operations are available
     bool isGPUAvailable() const;
 
+
+    std::shared_ptr<Table> executeBatchedJoin(
+        const std::vector<std::shared_ptr<Table>>& tables,
+        const hsql::Expr* joinConditions);
+
 private:
     // Prepare expression for GPU execution
     void prepareExpression(const hsql::Expr *expr);
@@ -79,4 +86,34 @@ private:
         const hsql::Expr *expr);
 
     bool hasGPU_;
+
+
+    
+    // Helper methods for batched processing
+    std::vector<uint8_t> processBatch(
+        const std::vector<std::shared_ptr<Table>>& tables,
+        const std::vector<std::vector<int>>& batchIndices,
+        const hsql::Expr* conditions);
+        
+    std::vector<uint8_t> evaluateConditionOnBatch(
+        const std::vector<std::shared_ptr<Table>>& tables,
+        const std::vector<std::vector<int>>&  batchIndices,
+        const hsql::Expr* condition);
+        
+    // Method to merge rows from tables based on mask
+    std::vector<std::vector<std::string>> mergeBatchResults(
+        const std::vector<std::shared_ptr<Table>>& tables,
+        const std::vector<std::vector<int>>& selectedIndices);
+        
+    // Method to combine headers from multiple tables
+    std::vector<std::string> combineMultipleHeaders(
+        const std::vector<std::shared_ptr<Table>>& tables);
+
+
+        void processBatchesRecursive(
+            const std::vector<std::shared_ptr<Table>>& tables,
+            std::vector<std::vector<int>>& batchIndices,
+            const hsql::Expr* joinConditions,
+            std::vector<std::vector<std::string>>& resultData,
+            int tableIndex);
 };
