@@ -67,6 +67,13 @@
         "__nullptr": "cpp",
         "__node_handle": "cpp",
         "__split_buffer": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "charconv": "cpp",
+        "set": "cpp",
+        "shared_mutex": "cpp",
+        "span": "cpp",
+        "cfenv": "cpp",
+        "variant": "cpp",
+        "format": "cpp"
     }
 }

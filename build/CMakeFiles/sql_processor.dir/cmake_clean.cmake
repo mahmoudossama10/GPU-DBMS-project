@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/sql_processor.dir/cmake_device_link.o"
   "CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o"
   "CMakeFiles/sql_processor.dir/src/CLI/CommandLineInterface.cpp.o.d"
   "CMakeFiles/sql_processor.dir/src/DataHandling/CSVProcessor.cpp.o"
@@ -11,6 +12,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o.d"
   "CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o"
   "CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.o.d"
+  "CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o"
+  "CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o.d"
   "CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o"
   "CMakeFiles/sql_processor.dir/src/Operations/Join.cpp.o.d"
   "CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o"

@@ -1,6 +1,11 @@
-dept_id_P,dept_name
-101,Engineering
-102,HR
-103,Marketing
-104,Finance
-105,Sales
+department_id_P,department_name
+1,HR
+2,Engineering
+3,Finance
+4,Sales
+5,Sales
+6,Marketing
+7,HR
+8,R&D
+9,HR
+10,Support

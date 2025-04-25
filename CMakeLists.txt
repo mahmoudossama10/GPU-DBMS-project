@@ -1,67 +1,54 @@
-cmake_minimum_required(VERSION 3.18)  # Minimum required for good CUDA/C++17 support
+cmake_minimum_required(VERSION 3.18)
 project(SQLProcessor LANGUAGES CXX CUDA)
 
-# Set C++ and CUDA standards
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CUDA_STANDARD 14)
 
-# Disable PIE to avoid illegal instruction issues on older CPUs
-set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
-
-# Include directories
+# Include headers
 include_directories(
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/sql-parser-main/src
 )
 
-# SQL Parser and CUDA libraries
+# (If needed: Make sure find_library finds your local sqlparser.a, or set SQLPARSER_LIB manually)
 link_directories(
     ${PROJECT_SOURCE_DIR}/sql-parser-main/build
-    /usr/local/cuda/lib64
 )
 
-# Collect all .cpp and .cu source files
+# Gather sources
 file(GLOB_RECURSE CPP_SOURCES
-    src/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/*.cpp
 )
 file(GLOB_RECURSE CU_SOURCES
-    src/*.cu
+    ${PROJECT_SOURCE_DIR}/src/*.cu
 )
 
-# Output binary directory
+# Set output dir for binaries
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-# Define the target
+# Define executable, .cpp and .cu together
 add_executable(sql_processor ${CPP_SOURCES} ${CU_SOURCES})
 
-# Compile flags
+# CUDA requirements for proper linking:
+set_target_properties(sql_processor PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    CUDA_ARCHITECTURES 52 # (or set for your GPU: 52 for Maxwell, 60/61 for Pascal, etc.)
+)
+
 target_compile_options(sql_processor PRIVATE
     -Wall -Wextra
 )
 
-# Link libraries
-target_link_libraries(sql_processor
-    sqlparser
-    cudart
-)
-
-# Link filesystem on older GCC (<9)
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    execute_process(COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-    string(REPLACE "." ";" GCC_VER_LIST ${GCC_VERSION})
-    list(GET GCC_VER_LIST 0 GCC_VER_MAJOR)
-    if (GCC_VER_MAJOR LESS 9)
-        target_link_libraries(sql_processor PRIVATE stdc++fs)
-    endif()
+# Modern CMake: Prefer imported CUDA::cudart target if available, else fallback
+find_package(CUDAToolkit)
+if (CUDAToolkit_FOUND AND TARGET CUDA::cudart)
+    target_link_libraries(sql_processor
+        CUDA::cudart
+        sqlparser
+    )
+else()
+    target_link_libraries(sql_processor
+        cudart
+        sqlparser
+    )
 endif()
-
-# Optional: custom 'run' target
-add_custom_target(run
-    COMMAND "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/sql_processor"
-    DEPENDS sql_processor
-    WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    COMMENT "Running SQL Processor..."
-)

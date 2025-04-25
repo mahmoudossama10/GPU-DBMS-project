@@ -129,19 +129,6 @@ sql_processor/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/sql_processor.dir/build.make CMakeFiles/sql_processor.dir/build
 .PHONY : sql_processor/fast
 
-#=============================================================================
-# Target rules for targets named run
-
-# Build rule for target.
-run: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 run
-.PHONY : run
-
-# fast build rule for target.
-run/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/run.dir/build.make CMakeFiles/run.dir/build
-.PHONY : run/fast
-
 src/CLI/CommandLineInterface.o: src/CLI/CommandLineInterface.cpp.o
 .PHONY : src/CLI/CommandLineInterface.o
 
@@ -285,6 +272,30 @@ src/Operations/Filter.s: src/Operations/Filter.cpp.s
 src/Operations/Filter.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/sql_processor.dir/build.make CMakeFiles/sql_processor.dir/src/Operations/Filter.cpp.s
 .PHONY : src/Operations/Filter.cpp.s
+
+src/Operations/GPUAggregator.o: src/Operations/GPUAggregator.cu.o
+.PHONY : src/Operations/GPUAggregator.o
+
+# target to build an object file
+src/Operations/GPUAggregator.cu.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/sql_processor.dir/build.make CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o
+.PHONY : src/Operations/GPUAggregator.cu.o
+
+src/Operations/GPUAggregator.i: src/Operations/GPUAggregator.cu.i
+.PHONY : src/Operations/GPUAggregator.i
+
+# target to preprocess a source file
+src/Operations/GPUAggregator.cu.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/sql_processor.dir/build.make CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.i
+.PHONY : src/Operations/GPUAggregator.cu.i
+
+src/Operations/GPUAggregator.s: src/Operations/GPUAggregator.cu.s
+.PHONY : src/Operations/GPUAggregator.s
+
+# target to generate assembly for a file
+src/Operations/GPUAggregator.cu.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/sql_processor.dir/build.make CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.s
+.PHONY : src/Operations/GPUAggregator.cu.s
 
 src/Operations/Join.o: src/Operations/Join.cpp.o
 .PHONY : src/Operations/Join.o
@@ -534,7 +545,6 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... run"
 	@echo "... sql_processor"
 	@echo "... src/CLI/CommandLineInterface.o"
 	@echo "... src/CLI/CommandLineInterface.i"
@@ -554,6 +564,9 @@ help:
 	@echo "... src/Operations/Filter.o"
 	@echo "... src/Operations/Filter.i"
 	@echo "... src/Operations/Filter.s"
+	@echo "... src/Operations/GPUAggregator.o"
+	@echo "... src/Operations/GPUAggregator.i"
+	@echo "... src/Operations/GPUAggregator.s"
 	@echo "... src/Operations/Join.o"
 	@echo "... src/Operations/Join.i"
 	@echo "... src/Operations/Join.s"
