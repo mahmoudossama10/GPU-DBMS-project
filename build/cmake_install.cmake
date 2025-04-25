@@ -1,4 +1,4 @@
-# Install script for directory: /home/kareem/GPU-DBMS-project
+# Install script for directory: /media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/kareem/GPU-DBMS-project/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

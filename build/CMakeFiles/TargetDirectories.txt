@@ -1,3 +1,4 @@
-/home/kareem/GPU-DBMS-project/build/CMakeFiles/sql_processor.dir
-/home/kareem/GPU-DBMS-project/build/CMakeFiles/edit_cache.dir
-/home/kareem/GPU-DBMS-project/build/CMakeFiles/rebuild_cache.dir
+/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles/sql_processor.dir
+/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles/run.dir
+/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles/edit_cache.dir
+/media/mahmoud-ossama/Lexar NVME 512GB/GitHub/GPU-DBMS-project/build/CMakeFiles/rebuild_cache.dir

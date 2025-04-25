@@ -6,15 +6,13 @@
 #include <filesystem>
 #include <sys/stat.h>
 
-void ensureDirectoryExists(const std::string &dirPath)
-{
-    struct stat info;
-    if (stat(dirPath.c_str(), &info) != 0) // Check if directory exists
-    {
-        if (mkdir(dirPath.c_str(), 0777) != 0) // Try to create directory
-        {
-            throw std::runtime_error("Failed to create directory: " + dirPath);
-        }
+void ensureDirectoryExists(const std::string &dirPath) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    // create_directories will recursively create all missing parents.
+    if (!fs::create_directories(dirPath, ec) && ec) {
+        throw std::runtime_error(
+          "Failed to create directory '" + dirPath + "': " + ec.message());
     }
 }
 

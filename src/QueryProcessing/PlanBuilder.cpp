@@ -283,7 +283,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     }
 
     // First, process subqueries in the WHERE clause, if any
-    setExecutionMode(ExecutionMode::GPU);
+    setExecutionMode(ExecutionMode::CPU);
 
     hsql::Expr *processed_where = nullptr;
     if (stmt->whereClause && hasSubquery(stmt->whereClause))
