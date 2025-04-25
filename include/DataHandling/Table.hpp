@@ -34,6 +34,7 @@ public:
 
     size_t getColumnIndex(const std::string &columnName) const;
     bool hasColumn(const std::string &columnName) const;
+    size_t getRowSize() const;
 
 private:
     void processHeaders(const std::vector<std::string> &originalHeaders);

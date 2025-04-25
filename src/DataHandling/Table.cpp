@@ -130,3 +130,8 @@ const int Table::getSize() const
 {
     return data.size();
 }
+
+size_t Table::getRowSize() const
+{
+    return data[0].size();
+}

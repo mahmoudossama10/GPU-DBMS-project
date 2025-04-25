@@ -42,3 +42,5 @@ target_link_libraries(sql_processor
     sqlparser
     cudart
 )
+
+

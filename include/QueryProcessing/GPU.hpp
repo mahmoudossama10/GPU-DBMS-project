@@ -22,7 +22,7 @@ public:
                                        std::shared_ptr<Table> rightTable,
                                        const hsql::Expr *condition);
 
-    std::vector<uint8_t> gpuJoinTables(
+    std::pair<std::vector<std::pair<int, int>>, int>  gpuJoinTables(
         const Table &leftTable,
         const Table &rightTable,
         const hsql::Expr *conditions);
@@ -43,7 +43,7 @@ public:
     std::vector<std::vector<std::string>> mergeJoinResults(
         const Table &left,
         const Table &right,
-        const std::vector<uint8_t> &mask) const;
+        const std::vector<std::pair<int, int>>& joinPairs) const;
 
     std::vector<std::vector<std::string>> mergeFilterResults(
         const Table &table,

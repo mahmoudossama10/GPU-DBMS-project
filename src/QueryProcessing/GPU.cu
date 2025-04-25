@@ -4,8 +4,11 @@
 #include <algorithm>
 #include <cstring>
 #include <cuda_runtime.h>
-
+#include <iostream>
+#include <sstream>
+#include <chrono>
 // CUDA kernels
+using namespace std::chrono;
 
 // Helper for string comparison on device
 __device__ int strcmp_device(const char* str1, const char* str2) {
@@ -16,6 +19,43 @@ __device__ int strcmp_device(const char* str1, const char* str2) {
     return *(const unsigned char*)str1 - *(const unsigned char*)str2;
 }
 
+
+__device__ unsigned int matchCounter = 0;
+
+// Kernel to convert boolean matrix to array of index pairs
+__global__ void convertToPairs(
+    const uint8_t* resultMatrix,
+    int2* pairs,
+    int leftSize,
+    int rightSize,
+    int maxPairs)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int totalSize = leftSize * rightSize;
+    
+    if (idx < totalSize) {
+        int i = idx / rightSize;  // Row index (left table)
+        int j = idx % rightSize;  // Column index (right table)
+        
+        if (resultMatrix[idx] == 1) {
+            // Found a match, add it to pairs array
+            unsigned int pairIdx = atomicAdd(&matchCounter, 1);
+            if (pairIdx < maxPairs) {
+                pairs[pairIdx] = make_int2(i, j);
+            }
+        }
+    }
+}
+
+// Reset counter kernel
+__global__ void resetMatchCounter() {
+    matchCounter = 0;
+}
+
+// Get final counter value kernel
+__global__ void getMatchCount(unsigned int* count) {
+    *count = matchCounter;
+}
 
 
 
@@ -339,8 +379,7 @@ int GPUManager::findColumnIndex(const Table& table, const char* columnName, cons
     
     return -1; // Column not found
 }
-
-std::vector<uint8_t> GPUManager::gpuJoinTables(
+std::pair<std::vector<std::pair<int, int>>, int> GPUManager::gpuJoinTables(
     const Table& leftTable, 
     const Table& rightTable,
     const hsql::Expr* conditions) 
@@ -353,7 +392,7 @@ std::vector<uint8_t> GPUManager::gpuJoinTables(
     int rightSize = rightTable.getSize();
     int resultSize = leftSize * rightSize;
     
-    std::vector<uint8_t> resultVector(resultSize, 0);
+    std::vector<uint8_t> resultMatrix(resultSize, 0);
     
     // Process each condition and combine results
     if (conditions->type == hsql::kExprOperator) {
@@ -381,7 +420,7 @@ std::vector<uint8_t> GPUManager::gpuJoinTables(
             combineResults<<<numBlocks, blockSize>>>(d_leftResults, d_rightResults, d_output, resultSize, isAnd);
             
             // Copy results back to host
-            cudaMemcpy(resultVector.data(), d_output, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+            cudaMemcpy(resultMatrix.data(), d_output, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
             
             // Free device memory
             cudaFree(d_leftResults);
@@ -390,28 +429,101 @@ std::vector<uint8_t> GPUManager::gpuJoinTables(
         } 
         else {
             // Process comparison operation
-            resultVector = processComparisonExpr(leftTable, rightTable, conditions);
+            resultMatrix = processComparisonExpr(leftTable, rightTable, conditions);
         }
     }
     
-    return resultVector;
+    // Now convert the result matrix to pairs
+    
+    // Count the number of 1s in the matrix (for CPU fallback and sizing)
+    int matchCount = 0;
+    for (int i = 0; i < resultSize; i++) {
+        if (resultMatrix[i] == 1) {
+            matchCount++;
+        }
+    }
+    
+    // Prepare to convert result matrix to pairs
+    int maxPairs = matchCount;  // We know exactly how many pairs we need
+    
+    // Allocate device memory
+    uint8_t* d_resultMatrix;
+    int2* d_resultPairs;
+    unsigned int* d_count;
+    
+    cudaMalloc(&d_resultMatrix, resultSize * sizeof(uint8_t));
+    cudaMalloc(&d_resultPairs, maxPairs * sizeof(int2));
+    cudaMalloc(&d_count, sizeof(unsigned int));
+    
+    
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+
+    // Copy result matrix to device
+    cudaMemcpy(d_resultMatrix, resultMatrix.data(), resultSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
+    
+    // Reset counter
+    resetMatchCounter<<<1, 1>>>();
+    cudaDeviceSynchronize();
+    
+    // Convert to pairs
+    int blockSize = 256;
+    int numBlocks = (resultSize + blockSize - 1) / blockSize;
+    convertToPairs<<<numBlocks, blockSize>>>(d_resultMatrix, d_resultPairs, leftSize, rightSize, maxPairs);
+    cudaDeviceSynchronize();
+    
+    // Get actual number of pairs found
+    unsigned int actualMatchCount;
+    getMatchCount<<<1, 1>>>(d_count);
+    cudaMemcpy(&actualMatchCount, d_count, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+        
+    // Copy pairs back to host
+    std::vector<int2> tempPairs(matchCount);
+    cudaMemcpy(tempPairs.data(), d_resultPairs, matchCount * sizeof(int2), cudaMemcpyDeviceToHost);
+    
+    // Convert int2 to std::pair<int, int>
+    std::vector<std::pair<int, int>> resultPairs(matchCount);
+    for (int i = 0; i < matchCount; i++) {
+        resultPairs[i] = std::make_pair(tempPairs[i].x, tempPairs[i].y);
+    }
+    
+
+
+    
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+        float elapsedTime;
+        cudaEventElapsedTime(&elapsedTime, start, stop);
+        std::cout << "pairs compareIntColumns time: " << elapsedTime << " milliseconds" << std::endl;
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
+    // Free device memory
+    cudaFree(d_resultMatrix);
+    cudaFree(d_resultPairs);
+    cudaFree(d_count);
+    
+    return {resultPairs, matchCount};
 }
 
 std::shared_ptr<Table> GPUManager::executeJoin(std::shared_ptr<Table> leftTable,
-                                             std::shared_ptr<Table> rightTable,
-                                             const hsql::Expr* condition) {
-    // Get GPU join mask
-    auto mask = gpuJoinTables(*leftTable, *rightTable, condition);
-    
+    std::shared_ptr<Table> rightTable,
+    const hsql::Expr* condition) {
+    // Get GPU join pairs and count
+    auto result = gpuJoinTables(*leftTable, *rightTable, condition);
+    auto joinPairs = result.first;
+    auto matchCount = result.second;
+
     // Create result table structure
     auto headers = combineHeaders(*leftTable, *rightTable);
-    auto data = mergeJoinResults(*leftTable, *rightTable, mask);
-    
+    auto data = mergeJoinResults(*leftTable, *rightTable, joinPairs);
+
     return std::make_shared<Table>(
-        leftTable->getName() + "_joined_" + rightTable->getName(),
-        headers,
-        data
-    );
+    leftTable->getName() + "_joined_" + rightTable->getName(),
+    headers,
+    data
+);
 }
 
 std::shared_ptr<Table> GPUManager::applyFilter(const Table& table, 
@@ -461,27 +573,32 @@ std::vector<std::string> GPUManager::combineHeaders(const Table& left,
 std::vector<std::vector<std::string>> GPUManager::mergeJoinResults(
     const Table& left,
     const Table& right,
-    const std::vector<uint8_t>& mask) const {
+    const std::vector<std::pair<int, int>>& joinPairs) const {
     
     std::vector<std::vector<std::string>> result;
-    const size_t rightSize = right.getSize();
+    result.reserve(joinPairs.size()); // Pre-allocate for better performance
     
+    auto start = high_resolution_clock::now();
+
     #pragma omp parallel for
-    for (size_t idx = 0; idx < mask.size(); ++idx) {
-        if (mask[idx]) {
-            // Calculate row indices
-            const size_t leftIdx = idx / rightSize;
-            const size_t rightIdx = idx % rightSize;
-            
-            // Combine rows
-            auto combined = left.getRow(leftIdx);
-            const auto& rightRow = right.getRow(rightIdx);
-            combined.insert(combined.end(), rightRow.begin(), rightRow.end());
-            
-            #pragma omp critical
-            result.push_back(std::move(combined));
-        }
+    for (size_t i = 0; i < joinPairs.size(); ++i) {
+        const auto& pair = joinPairs[i];
+        int leftIdx = pair.first;
+        int rightIdx = pair.second;
+
+        
+        // Combine rows
+        auto combined = left.getRow(leftIdx);
+        const auto& rightRow = right.getRow(rightIdx);
+        combined.insert(combined.end(), rightRow.begin(), rightRow.end());
+        
+        #pragma omp critical
+        result.push_back(std::move(combined));
     }
+    
+    auto end = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(end - start);
+    std::cout << "Join merge time: " << joinPairs.size() << " matches, " << duration.count() << " ms" << std::endl;
     
     return result;
 }
@@ -753,6 +870,9 @@ std::vector<uint8_t> GPUManager::gpuFilterTable(
                   compareStringColumnsOneTable<<<gridDim, blockDim>>>(
                       d_leftStrings, d_rightStrings, tableSize, tableSize, d_results, opType);
                   
+
+                  cudaDeviceSynchronize();
+                    
                   cudaEventRecord(stop);
                   cudaEventSynchronize(stop);
                   float elapsedTime;
@@ -868,6 +988,11 @@ std::vector<uint8_t> GPUManager::processComparisonExpr(
             int *d_leftCol, *d_rightCol;
             uint8_t *d_results;
             
+            cudaEvent_t start, stop;
+            cudaEventCreate(&start);
+            cudaEventCreate(&stop);
+            cudaEventRecord(start);
+
             cudaMalloc(&d_leftCol, leftSize * sizeof(int));
             cudaMalloc(&d_rightCol, rightSize * sizeof(int));
             cudaMalloc(&d_results, resultSize * sizeof(uint8_t));
@@ -876,25 +1001,25 @@ std::vector<uint8_t> GPUManager::processComparisonExpr(
             cudaMemcpy(d_leftCol, leftColData.data(), leftSize * sizeof(int), cudaMemcpyHostToDevice);
             cudaMemcpy(d_rightCol, rightColData.data(), rightSize * sizeof(int), cudaMemcpyHostToDevice);
             
-            cudaEvent_t start, stop;
-            cudaEventCreate(&start);
-            cudaEventCreate(&stop);
-            cudaEventRecord(start);
+
             // Launch integer comparison kernel
             compareIntColumns<<<gridDim, blockDim>>>(
                 d_leftCol, d_rightCol, leftSize, rightSize, d_results, opType);
-            
-                cudaEventRecord(stop);
-                cudaEventSynchronize(stop);
-                float elapsedTime;
-                cudaEventElapsedTime(&elapsedTime, start, stop);
-                std::cout << "Elapsed compareIntColumns time: " << elapsedTime << " milliseconds" << std::endl;
-                cudaEventDestroy(start);
-                cudaEventDestroy(stop);
+                cudaDeviceSynchronize();
+
+
                 
             // Copy results back to host
             cudaMemcpy(resultVector.data(), d_results, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
             
+
+            cudaEventRecord(stop);
+            cudaEventSynchronize(stop);
+            float elapsedTime;
+            cudaEventElapsedTime(&elapsedTime, start, stop);
+            std::cout << "Elapsed compareIntColumns time: " << elapsedTime << " milliseconds" << std::endl;
+            cudaEventDestroy(start);
+            cudaEventDestroy(stop);
             // Free device memory
             cudaFree(d_leftCol);
             cudaFree(d_rightCol);
