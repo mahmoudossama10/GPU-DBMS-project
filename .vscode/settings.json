@@ -74,6 +74,8 @@
         "span": "cpp",
         "cfenv": "cpp",
         "variant": "cpp",
-        "format": "cpp"
+        "format": "cpp",
+        "future": "cpp",
+        "stack": "cpp"
     }
 }

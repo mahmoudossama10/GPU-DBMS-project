@@ -24,6 +24,7 @@ public:
                                        std::shared_ptr<Table> rightTable,
                                        const hsql::Expr *condition);
 
+                                       
     std::vector<uint8_t> gpuJoinTables(
         const Table &leftTable,
         const Table &rightTable,
