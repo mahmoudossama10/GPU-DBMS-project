@@ -225,6 +225,7 @@ CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/mathcalls.h \
  /usr/include/x86_64-linux-gnu/bits/mathcalls-narrow.h \
  /usr/include/x86_64-linux-gnu/bits/iscanonical.h \
+<<<<<<< HEAD
  /usr/include/c++/11/bits/specfun.h /usr/include/c++/11/limits \
  /usr/include/c++/11/tr1/gamma.tcc \
  /usr/include/c++/11/tr1/special_function_util.h \
@@ -239,3 +240,21 @@ CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o: \
  /usr/include/c++/11/tr1/poly_laguerre.tcc \
  /usr/include/c++/11/tr1/riemann_zeta.tcc \
  /home/kareem/GPU-DBMS-project/src/Operations/../../include/Operations/GPUAggregator.hpp
+=======
+ /usr/include/c++/12/bits/specfun.h /usr/include/c++/12/limits \
+ /usr/include/c++/12/tr1/gamma.tcc \
+ /usr/include/c++/12/tr1/special_function_util.h \
+ /usr/include/c++/12/tr1/bessel_function.tcc \
+ /usr/include/c++/12/tr1/beta_function.tcc \
+ /usr/include/c++/12/tr1/ell_integral.tcc \
+ /usr/include/c++/12/tr1/exp_integral.tcc \
+ /usr/include/c++/12/tr1/hypergeometric.tcc \
+ /usr/include/c++/12/tr1/legendre_function.tcc \
+ /usr/include/c++/12/tr1/modified_bessel_func.tcc \
+ /usr/include/c++/12/tr1/poly_hermite.tcc \
+ /usr/include/c++/12/tr1/poly_laguerre.tcc \
+ /usr/include/c++/12/tr1/riemann_zeta.tcc \
+ /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Operations/GPUAggregator.hpp \
+ /usr/include/c++/12/iostream /usr/include/c++/12/istream \
+ /usr/include/c++/12/bits/istream.tcc
+>>>>>>> mahmoud_GPU

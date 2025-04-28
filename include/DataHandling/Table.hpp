@@ -34,6 +34,7 @@ public:
 
     size_t getColumnIndex(const std::string &columnName) const;
     bool hasColumn(const std::string &columnName) const;
+    const std::vector<int>& getIntColumn(const std::string& colName) const;
 
 private:
     void processHeaders(const std::vector<std::string> &originalHeaders);
@@ -47,4 +48,5 @@ private:
     std::unordered_map<std::string, size_t> columnIndices;
     std::vector<std::string> primaryKeys;
     std::unordered_map<std::string, ForeignKeyInfo> foreignKeys;
+    mutable std::unordered_map<std::string, std::vector<int>> int_column_cache;
 };

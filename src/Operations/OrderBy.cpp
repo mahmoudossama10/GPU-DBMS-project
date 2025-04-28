@@ -1,6 +1,7 @@
 #include "../../include/Operations/OrderBy.hpp"
 #include "../../include/Utilities/ErrorHandling.hpp"
 #include "../../include/Utilities/StringUtils.hpp"
+#include "../../include/Operations/GPUAggregator.hpp"
 #include <algorithm>
 #include <stdexcept>
 #include <cmath>
@@ -16,20 +17,46 @@ std::shared_ptr<Table> OrderByPlan::execute()
     auto input_table = input_->execute();
     auto sort_cols = parseOrderBy(*input_table);
 
-    // Create modifiable copy of data
-    auto sorted_data = input_table->getData();
+    // --- Only support single int ORDER BY in this version ---
+    if (sort_cols.size() != 1)
+        throw SemanticError("Only single-column ORDER BY supported for GPU.");
 
-    // Sort using custom comparator
-    std::sort(sorted_data.begin(), sorted_data.end(),
-              [&](const auto &a, const auto &b)
-              {
-                  return compareRows(a, b, sort_cols);
-              });
+    const auto& colname = input_table->getHeaders()[sort_cols[0].column_index];
+    bool ascending = sort_cols[0].is_ascending;
 
-    return std::make_shared<Table>(
-        input_table->getName() + "_sorted",
-        input_table->getHeaders(),
-        sorted_data);
+    // Try int column (fastest, canonical case for benchmarking!)
+    try {
+        // Use your Table column cache
+        const auto& col_data = input_table->getIntColumn(colname);
+
+        // GPU sort
+        std::vector<int> indices = GPUAggregator::gpuArgsortInt(col_data, ascending);
+
+        // Reorder rows
+        std::vector<std::vector<std::string>> sorted_data;
+        sorted_data.reserve(indices.size());
+        for (int idx : indices)
+            sorted_data.push_back(input_table->getRow(idx));
+
+        // Return sorted table
+        return std::make_shared<Table>(
+            input_table->getName() + "_sorted",
+            input_table->getHeaders(),
+            sorted_data);
+    } catch (...) {
+        // Fallback to CPU or string-based sort if int conversion fails
+        auto sorted_data = input_table->getData();
+        std::sort(sorted_data.begin(), sorted_data.end(),
+            [&](const auto& a, const auto& b) {
+                return ascending
+                    ? a[sort_cols[0].column_index] < b[sort_cols[0].column_index]
+                    : a[sort_cols[0].column_index] > b[sort_cols[0].column_index];
+            });
+        return std::make_shared<Table>(
+            input_table->getName() + "_sorted",
+            input_table->getHeaders(),
+            sorted_data);
+    }
 }
 
 std::vector<OrderByPlan::SortColumn> OrderByPlan::parseOrderBy(const Table &table) const

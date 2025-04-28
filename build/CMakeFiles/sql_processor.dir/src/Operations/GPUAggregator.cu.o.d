@@ -227,6 +227,7 @@ CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o : /home/kareem/GP
     /usr/include/asm-generic/errno.h \
     /usr/include/asm-generic/errno-base.h \
     /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
+<<<<<<< HEAD
     /usr/include/c++/11/bits/charconv.h \
     /usr/include/c++/11/bits/basic_string.tcc \
     /usr/include/c++/11/climits \
@@ -246,3 +247,25 @@ CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o : /home/kareem/GP
     /usr/include/c++/11/bits/stl_tempbuf.h \
     /usr/include/c++/11/bits/uniform_int_dist.h \
     /usr/include/c++/11/limits
+=======
+    /usr/include/c++/12/bits/charconv.h \
+    /usr/include/c++/12/bits/basic_string.tcc \
+    /usr/include/c++/12/climits \
+    /usr/include/c++/12/stdexcept \
+    /usr/include/c++/12/exception \
+    /usr/include/c++/12/bits/exception_ptr.h \
+    /usr/include/c++/12/bits/cxxabi_init_exception.h \
+    /usr/include/c++/12/typeinfo \
+    /usr/include/c++/12/bits/nested_exception.h \
+    /usr/include/c++/12/cstring \
+    /usr/include/c++/12/algorithm \
+    /usr/include/c++/12/bits/stl_algo.h \
+    /usr/include/c++/12/bits/algorithmfwd.h \
+    /usr/include/c++/12/bits/stl_heap.h \
+    /usr/include/c++/12/bits/stl_tempbuf.h \
+    /usr/include/c++/12/bits/uniform_int_dist.h \
+    /usr/include/c++/12/limits \
+    /usr/include/c++/12/numeric \
+    /usr/include/c++/12/bits/stl_numeric.h \
+    /usr/include/c++/12/bit
+>>>>>>> mahmoud_GPU

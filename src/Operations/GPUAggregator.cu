@@ -6,6 +6,185 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
+#include <numeric>
+
+// ------------------ Kernel ------------------
+
+
+struct IntAggregatesDevice {
+
+    long long sum;
+
+    int count;
+
+    int min;
+
+    int max;
+
+};
+
+
+__global__
+
+void multiAggregate_kernel(const int* data, int N, IntAggregatesDevice* result) {
+
+    extern __shared__ int buf[]; // blockDim.x ints for reductions
+
+    int tid = threadIdx.x;
+
+    int globalIdx = blockIdx.x * blockDim.x + tid;
+
+
+    // Local partials
+
+    long long tsum = 0;
+
+    int tmin = INT_MAX, tmax = INT_MIN, tcount = 0;
+
+
+    // Stride through the array (to support any N)
+
+    for (int i = globalIdx; i < N; i += blockDim.x * gridDim.x) {
+
+        int val = data[i];
+
+        tsum += val;
+
+        tmin = min(tmin, val);
+
+        tmax = max(tmax, val);
+
+        ++tcount;
+
+    }
+
+
+    // Reduce within the block
+
+    // use shared memory for sum/min/max/count
+
+    __shared__ long long s_sum[256];
+
+    __shared__ int s_min[256], s_max[256], s_count[256];
+
+    s_sum[tid] = tsum;
+
+    s_min[tid] = tmin;
+
+    s_max[tid] = tmax;
+
+    s_count[tid] = tcount;
+
+
+    __syncthreads();
+
+
+    for (int s = blockDim.x/2; s>0; s>>=1) {
+
+        if (tid < s) {
+
+            s_sum[tid] += s_sum[tid+s];
+
+            s_min[tid] = min(s_min[tid], s_min[tid+s]);
+
+            s_max[tid] = max(s_max[tid], s_max[tid+s]);
+
+            s_count[tid] += s_count[tid+s];
+
+        }
+
+        __syncthreads();
+
+    }
+
+
+    // Block leader atomically adds results to global result
+
+    if (tid == 0) {
+
+        atomicAdd((unsigned long long*)&(result->sum), (unsigned long long)s_sum[0]);
+
+        atomicMin(&(result->min), s_min[0]);
+
+        atomicMax(&(result->max), s_max[0]);
+
+        atomicAdd(&(result->count), s_count[0]);
+
+    }
+
+}
+
+
+// Host wrapper: Batched aggregation
+
+GPUAggregator::IntAggregates GPUAggregator::multiAggregateInt(const std::vector<int>& col) {
+
+    IntAggregates out;
+
+    if(col.empty()) return out;
+
+
+    int N = col.size();
+
+    int* d_col = nullptr;
+
+    IntAggregatesDevice* d_result = nullptr;
+
+    IntAggregatesDevice h_result;
+
+
+    h_result.sum = 0;
+
+    h_result.count = 0;
+
+    h_result.min = INT_MAX;
+
+    h_result.max = INT_MIN;
+
+
+    cudaMalloc(&d_col, N*sizeof(int));
+
+    cudaMemcpy(d_col, col.data(), N*sizeof(int), cudaMemcpyHostToDevice);
+
+    cudaMalloc(&d_result, sizeof(IntAggregatesDevice));
+
+    cudaMemcpy(d_result, &h_result, sizeof(IntAggregatesDevice), cudaMemcpyHostToDevice);
+
+
+    int threads = 256;
+
+    int blocks = (N + threads - 1) / threads;
+
+    if (blocks > 1024) blocks = 1024;
+
+
+    multiAggregate_kernel<<<blocks, threads, 0>>>(d_col, N, d_result);
+
+    cudaDeviceSynchronize();
+
+
+    cudaMemcpy(&h_result, d_result, sizeof(IntAggregatesDevice), cudaMemcpyDeviceToHost);
+
+
+    cudaFree(d_col);
+
+    cudaFree(d_result);
+
+
+    out.sum = h_result.sum;
+
+    out.count = h_result.count;
+
+    out.min = h_result.min;
+
+    out.max = h_result.max;
+
+    out.avg = (h_result.count > 0) ? double(h_result.sum) / h_result.count : 0.0;
+
+
+    return out;
+
+}
 
 // CUDA error helper for debugging
 static inline void checkCuda(cudaError_t result, char const *const func, const char *const file, int const line) {
@@ -138,24 +317,38 @@ __global__ void bitonic_argsort_kernel(int* data, int* indices, int n, int ascen
 std::vector<int> GPUAggregator::gpuArgsortInt(const std::vector<int>& col, bool ascending) {
     int N = col.size();
     if (N == 0) return {};
-    if (N > 8192) throw std::runtime_error("Bitonic sort only used for N<=8192 for simplicity. For huge N, use chunked or radix sort.");
+
+    // Use bitonic only up to 8192 rows
+    const int MAX_N = 8192;
+    if (N > MAX_N) {
+        // Fallback to fast CPU std::argsort for huge N
+        std::vector<int> indices(N);
+        std::iota(indices.begin(), indices.end(), 0);
+        std::sort(indices.begin(), indices.end(), [&](int a, int b){
+            return ascending ? col[a] < col[b] : col[a] > col[b];
+        });
+        return indices;
+    }
 
     int* d_col = nullptr;
     int* d_idx = nullptr;
-
     checkCudaErrors(cudaMalloc(&d_col, N * sizeof(int)));
     checkCudaErrors(cudaMalloc(&d_idx, N * sizeof(int)));
     checkCudaErrors(cudaMemcpy(d_col, col.data(), N * sizeof(int), cudaMemcpyHostToDevice));
 
-    int blockSize = N;
-    int smemSize = 2*N*sizeof(int);
+    int blockSize = 1;
+    int threadsPerBlock = N;
+    int smemSize = 2 * N * sizeof(int);
 
-    bitonic_argsort_kernel<<<1, blockSize, smemSize>>>(d_col, d_idx, N, ascending ? 1 : 0);
+    // Kernel launch safely — 1 block, N threads, enough shared mem
+    bitonic_argsort_kernel<<<blockSize, threadsPerBlock, smemSize>>>(d_col, d_idx, N, ascending ? 1 : 0);
     checkCudaErrors(cudaDeviceSynchronize());
 
-    std::vector<int> h_idx(N);
-    checkCudaErrors(cudaMemcpy(h_idx.data(), d_idx, N * sizeof(int), cudaMemcpyDeviceToHost));
+    std::vector<int> host_idx(N);
+    checkCudaErrors(cudaMemcpy(host_idx.data(), d_idx, N * sizeof(int), cudaMemcpyDeviceToHost));
 
-    cudaFree(d_col); cudaFree(d_idx);
-    return h_idx;
+    cudaFree(d_col);
+    cudaFree(d_idx);
+
+    return host_idx;
 }

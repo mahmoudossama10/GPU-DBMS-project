@@ -207,6 +207,7 @@ CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o: \
  /usr/local/include/hsql/sql/Expr.h \
  /usr/local/include/hsql/util/sqlhelper.h \
  /usr/local/include/hsql/sql/statements.h \
+<<<<<<< HEAD
  /home/kareem/GPU-DBMS-project/src/Operations/../../include/Utilities/ErrorHandling.hpp \
  /home/kareem/GPU-DBMS-project/src/Operations/../../include/Utilities/StringUtils.hpp \
  /usr/include/c++/11/algorithm /usr/include/c++/11/bits/stl_algo.h \
@@ -217,6 +218,17 @@ CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o: \
  /usr/include/c++/11/functional /usr/include/c++/11/bits/std_function.h \
  /usr/include/c++/11/cmath /usr/include/math.h \
  /usr/include/x86_64-linux-gnu/bits/math-vector.h \
+=======
+ /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Utilities/ErrorHandling.hpp \
+ /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Utilities/StringUtils.hpp \
+ /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Operations/GPUAggregator.hpp \
+ /usr/include/c++/12/algorithm /usr/include/c++/12/bits/stl_algo.h \
+ /usr/include/c++/12/bits/algorithmfwd.h \
+ /usr/include/c++/12/bits/stl_heap.h \
+ /usr/include/c++/12/bits/uniform_int_dist.h \
+ /usr/include/c++/12/pstl/glue_algorithm_defs.h /usr/include/c++/12/cmath \
+ /usr/include/math.h /usr/include/x86_64-linux-gnu/bits/math-vector.h \
+>>>>>>> mahmoud_GPU
  /usr/include/x86_64-linux-gnu/bits/libm-simd-decl-stubs.h \
  /usr/include/x86_64-linux-gnu/bits/flt-eval-method.h \
  /usr/include/x86_64-linux-gnu/bits/fp-logb.h \

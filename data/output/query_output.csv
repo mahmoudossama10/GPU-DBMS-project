@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 p.project_id_P,p.project_name,p.departments_department_id,p.start_year,e.employee_id_P,e.name,e.departments_department_id,e.salary,e.age,d.department_id_P,d.department_name
 1,Project Beta 882,938,2018,522,James Davis,1,86072,34,136,Operations
 1,Project Beta 882,938,2018,522,James Davis,1,86072,34,178,Support
@@ -986,3 +987,7 @@ p.project_id_P,p.project_name,p.departments_department_id,p.start_year,e.employe
 924,Project Epsilon 564,688,2022,753,Olivia Garcia,924,94248,44,902,Engineering
 928,Project Zeta 943,761,2017,886,Noah Miller,928,114663,54,943,Engineering
 973,Project Zeta 817,372,2022,772,James Williams,973,41807,54,862,Sales
+=======
+total_employees,total_age,average_age,youngest_age,oldest_age
+8000,347187,43.398375,22,65
+>>>>>>> mahmoud_GPU

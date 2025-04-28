@@ -1,10 +1,17 @@
 CMakeFiles/sql_processor.dir/src/DataHandling/Table.cpp.o: \
  /home/kareem/GPU-DBMS-project/src/DataHandling/Table.cpp \
  /usr/include/stdc-predef.h \
+<<<<<<< HEAD
  /home/kareem/GPU-DBMS-project/include/DataHandling/Table.hpp \
  /usr/include/c++/11/string \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
+=======
+ /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/DataHandling/../../include/DataHandling/Table.hpp \
+ /usr/include/c++/12/string \
+ /usr/include/x86_64-linux-gnu/c++/12/bits/c++config.h \
+ /usr/include/x86_64-linux-gnu/c++/12/bits/os_defines.h \
+>>>>>>> mahmoud_GPU
  /usr/include/features.h /usr/include/features-time64.h \
  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
  /usr/include/x86_64-linux-gnu/bits/timesize.h \
