@@ -237,4 +237,6 @@ CMakeFiles/sql_processor.dir/src/Operations/Aggregator.cpp.o: \
  /usr/include/c++/12/tr1/poly_hermite.tcc \
  /usr/include/c++/12/tr1/poly_laguerre.tcc \
  /usr/include/c++/12/tr1/riemann_zeta.tcc \
- /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Operations/GPUAggregator.hpp
+ /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Operations/GPUAggregator.hpp \
+ /usr/include/c++/12/iostream /usr/include/c++/12/istream \
+ /usr/include/c++/12/bits/istream.tcc

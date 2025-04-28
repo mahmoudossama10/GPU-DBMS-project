@@ -33,7 +33,6 @@ namespace
             return false;
         }
 
-        // Check for "SELECT *" case
         for (auto *expr : *selectList)
         {
             if (expr->type == hsql::kExprStar)
@@ -53,7 +52,6 @@ namespace
                 return true;
             }
         }
-
         return false;
     }
 
@@ -103,6 +101,32 @@ namespace
         }
 
         return false;
+    }
+
+    bool selectListNeedsProjection(const std::vector<hsql::Expr *>& selectList) {
+
+        // If * present, never project
+    
+        for (auto* expr : selectList) if (expr->type == hsql::kExprStar) return false;
+    
+    
+        // If *table present, also never project
+    
+        for (auto* expr : selectList) {
+    
+            if (expr->type == hsql::kExprColumnRef && expr->name && std::strcmp(expr->name, "*") == 0) return false;
+    
+        }
+    
+    
+        // If any non-aggregate expression, projection is required
+    
+        for (auto* expr : selectList) if (expr->type != hsql::kExprFunctionRef) return true;
+    
+        // All are aggregates: NO projection needed
+    
+        return false;
+    
     }
 }
 
@@ -302,55 +326,69 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
 
     // If using GPU and there are no complex subqueries, use GPU path
     if (execution_mode_ == ExecutionMode::GPU && !has_subquery_in_from)
+
     {
-        // Use GPU for scan and filter in one operation
+
         auto plan = buildGPUScanPlan(stmt->fromTable, processed_where);
 
-        // Continue with CPU operations for the rest of the pipeline
         if (hasAggregates(*(stmt->selectList)))
+
         {
+
             plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
         }
 
-        if (!isSelectAll(stmt->selectList))
-        {
+        // Only create ProjectPlan if needed
+
+        // After buildAggregatePlan (or scan/aggregation/filter/etc):
+        if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList))) {
             plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
         }
 
         if (stmt->order && !stmt->order->empty())
+
         {
+
             plan = buildOrderByPlan(std::move(plan), *stmt->order);
         }
 
         return plan;
     }
+
     else
+
     {
-        // CPU path with subquery handling
+
+        // CPU path (repeat the same change!)
+
         auto plan = buildScanPlan(stmt->fromTable);
 
-        // Apply processed WHERE clause if present
         if (processed_where)
+
         {
+
             plan = buildFilterPlan(std::move(plan), processed_where);
         }
 
         if (hasAggregates(*(stmt->selectList)))
+
         {
+
             plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
         }
 
-        // Only add ProjectPlan if needed (not SELECT *)
-        if (!isSelectAll(stmt->selectList))
-        {
+        if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList))) {
+
             plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
+     
         }
 
         if (stmt->order && !stmt->order->empty())
+
         {
+
             plan = buildOrderByPlan(std::move(plan), *stmt->order);
         }
-
         return plan;
     }
 }

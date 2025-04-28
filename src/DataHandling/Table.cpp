@@ -1,4 +1,4 @@
-#include "DataHandling/Table.hpp"
+#include "../../include/DataHandling/Table.hpp"
 #include "Utilities/StringUtils.hpp"
 #include <algorithm>
 
@@ -129,4 +129,25 @@ bool Table::hasColumn(const std::string &columnName) const
 const int Table::getSize() const
 {
     return data.size();
+}
+
+const std::vector<int>& Table::getIntColumn(const std::string& colName) const {
+    auto it = int_column_cache.find(colName);
+    if (it != int_column_cache.end()) {
+        return it->second;
+    }
+    // Parse from string data
+    size_t idx = getColumnIndex(colName);
+    std::vector<int> values;
+    values.reserve(getSize());
+    for (const auto& row : data) {
+        try {
+            values.push_back(std::stoi(row[idx]));
+        } catch (...) {
+            throw std::runtime_error("Non-integer value found in column '" + colName + "'");
+        }
+    }
+    // Save and return reference
+    auto insert_result = int_column_cache.emplace(colName, std::move(values));
+    return insert_result.first->second;
 }

@@ -5,7 +5,8 @@
 #include <stdexcept>
 #include <cmath> // For NaN
 #include "../../include/Operations/GPUAggregator.hpp"
-
+#include <iostream>
+#include <unordered_map>
 using namespace StringUtils; // For case-insensitive comparison
 
 // Constructor
@@ -22,98 +23,173 @@ std::shared_ptr<Table> AggregatorPlan::execute()
     std::vector<std::string> headers;
     std::vector<std::string> result_row;
 
+
+    // ------ NEW: map from column name to computed IntAggregates (GPU results) ------
+    std::unordered_map<std::string, GPUAggregator::IntAggregates> int_col_aggregates;
+
+    // ------ NEW: track which columns we've attempted batched GPU on ------
+    std::unordered_map<std::string, bool> did_gpu_aggregate;
+
     for (const auto &agg : aggregates)
     {
+
         double value = NAN;
+
         int count = 0;
 
-        // === Your logic to check if int column and use GPU ===
-        bool useGPU = true; // Set properly (hardcode for dev, or use member variable)
-        bool isIntCol = true; // Set to true ONLY if every entry is an int (see below!)
+        bool isIntCol = false;
+        bool useGPU = true;
 
-        // Try to extract the column as vector<int> if possible
-        std::vector<int> col_data;
-        size_t col_idx = 0;
+
+        // -------- Handle COUNT(*) fast-path -----------
+
+        if (agg.type == AggregateInfo::AggType::COUNT && agg.column.empty()) {
+
+            result_row.push_back(std::to_string(input_table->getSize()));
+
+            headers.push_back(!agg.alias.empty() ? agg.alias : "COUNT(*)");
+
+            continue;
+
+        }
+
+
+        // -------- Batched int-aggregate logic ----------
+
         if (!agg.column.empty()) {
-            try {
-                col_idx = input_table->getColumnIndex(agg.column);
-                col_data.reserve(input_table->getData().size());
-                for (const auto& row : input_table->getData()) {
-                    // If it fails once, fallback to CPU path;
-                    try {
-                        col_data.push_back(std::stoi(row[col_idx]));
-                    } catch (...) {
-                        isIntCol = false; break;
+
+            // Only extract/calculate for a column if not already done!
+
+            if (did_gpu_aggregate.find(agg.column) == did_gpu_aggregate.end()) {
+                try {
+                    // ----------- NEW: Use the columnar cache! -----------
+                    const auto& col_data = input_table->getIntColumn(agg.column);
+                    isIntCol = true;
+                    if (useGPU) {
+                        int_col_aggregates[agg.column] = GPUAggregator::multiAggregateInt(col_data);
+                        did_gpu_aggregate[agg.column] = true;
+                    } else {
+                        did_gpu_aggregate[agg.column] = false;
                     }
+                } catch (...) {
+                    // If getIntColumn fails, treat as non-int
+                    isIntCol = false;
+                    did_gpu_aggregate[agg.column] = false;
                 }
-            } catch (...) { isIntCol = false; }
+            } else {
+                isIntCol = did_gpu_aggregate[agg.column];
+            }
+
         }
 
-        if (useGPU && (agg.type == AggregateInfo::AggType::SUM ||
-                    agg.type == AggregateInfo::AggType::AVG ||
-                    agg.type == AggregateInfo::AggType::MIN ||
-                    agg.type == AggregateInfo::AggType::MAX ||
-                    agg.type == AggregateInfo::AggType::COUNT)
-            && (agg.column.empty() || isIntCol))
-        {
-            // COUNT/SUM/AVG/MIN/MAX on int columns!
-            switch(agg.type) {
-            case AggregateInfo::AggType::COUNT:
-                if (agg.column.empty()) { // COUNT(*)
-                    count = input_table->getSize();
-                } else {
-                    count = GPUAggregator::countInt(col_data);
-                }
-                result_row.push_back(std::to_string(count));
-                break;
-            case AggregateInfo::AggType::SUM:
-                value = GPUAggregator::sumInt(col_data);
-                result_row.push_back(std::to_string(value));
-                break;
-            case AggregateInfo::AggType::AVG:
-                value = GPUAggregator::avgInt(col_data);
-                result_row.push_back(std::to_string(value));
-                break;
-            case AggregateInfo::AggType::MAX:
-                value = GPUAggregator::maxInt(col_data);
-                result_row.push_back(std::to_string(value));
-                break;
-            case AggregateInfo::AggType::MIN:
-                value = GPUAggregator::minInt(col_data);
-                result_row.push_back(std::to_string(value));
-                break;
-            }
-        } else {
-            // Fall back to original CPU code for non-int or error
+
+        // --------- Aggregate result assignment ---------
+
+        // Fill result_row, either using GPU-batched result or CPU fallback
+
+        if (useGPU && !agg.column.empty() && isIntCol && int_col_aggregates.find(agg.column) != int_col_aggregates.end()) {
+
+            // Use the batch results
+
+            const auto& aggs = int_col_aggregates[agg.column];
+
             switch (agg.type)
+
             {
+
             case AggregateInfo::AggType::COUNT:
-                count = computeCount(*input_table, agg.column);
-                result_row.push_back(std::to_string(count));
+
+                result_row.push_back(std::to_string(aggs.count));
+
                 break;
+
             case AggregateInfo::AggType::SUM:
-                value = computeSum(*input_table, agg.column);
-                result_row.push_back(std::to_string(value));
+
+                result_row.push_back(std::to_string(aggs.sum));
+
                 break;
+
             case AggregateInfo::AggType::AVG:
-                value = computeAvg(*input_table, agg.column);
-                result_row.push_back(std::to_string(value));
+
+                result_row.push_back(std::to_string(aggs.avg));
+
                 break;
+
             case AggregateInfo::AggType::MAX:
-                value = computeMax(*input_table, agg.column);
-                result_row.push_back(std::to_string(value));
+
+                result_row.push_back(std::to_string(aggs.max));
+
                 break;
+
             case AggregateInfo::AggType::MIN:
-                value = computeMin(*input_table, agg.column);
-                result_row.push_back(std::to_string(value));
+
+                result_row.push_back(std::to_string(aggs.min));
+
                 break;
+
             }
+
+        } else {
+
+            // ----------- CPU fallback as before -----------
+
+            switch (agg.type)
+
+            {
+
+            case AggregateInfo::AggType::COUNT:
+
+                count = computeCount(*input_table, agg.column);
+
+                result_row.push_back(std::to_string(count));
+
+                break;
+
+            case AggregateInfo::AggType::SUM:
+
+                value = computeSum(*input_table, agg.column);
+
+                result_row.push_back(std::to_string(value));
+
+                break;
+
+            case AggregateInfo::AggType::AVG:
+
+                value = computeAvg(*input_table, agg.column);
+
+                result_row.push_back(std::to_string(value));
+
+                break;
+
+            case AggregateInfo::AggType::MAX:
+
+                value = computeMax(*input_table, agg.column);
+
+                result_row.push_back(std::to_string(value));
+
+                break;
+
+            case AggregateInfo::AggType::MIN:
+
+                value = computeMin(*input_table, agg.column);
+
+                result_row.push_back(std::to_string(value));
+
+                break;
+
+            }
+
         }
 
-        // Build header as before
+
+        // ----------- Always build safe/correct headers -----------
+
         headers.push_back(!agg.alias.empty() ? agg.alias
+
                                             : (agg.column.empty() ? aggToString(agg.type) + "(*)"
+
                                                                 : aggToString(agg.type) + "(" + agg.column + ")"));
+
     }
 
     // Create output table

@@ -236,4 +236,7 @@ CMakeFiles/sql_processor.dir/src/Operations/GPUAggregator.cu.o : /media/mahmoud-
     /usr/include/c++/12/bits/stl_heap.h \
     /usr/include/c++/12/bits/stl_tempbuf.h \
     /usr/include/c++/12/bits/uniform_int_dist.h \
-    /usr/include/c++/12/limits
+    /usr/include/c++/12/limits \
+    /usr/include/c++/12/numeric \
+    /usr/include/c++/12/bits/stl_numeric.h \
+    /usr/include/c++/12/bit

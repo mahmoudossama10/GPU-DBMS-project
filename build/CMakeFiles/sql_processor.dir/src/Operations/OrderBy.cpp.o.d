@@ -210,6 +210,7 @@ CMakeFiles/sql_processor.dir/src/Operations/OrderBy.cpp.o: \
  /usr/local/include/hsql/sql/statements.h \
  /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Utilities/ErrorHandling.hpp \
  /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Utilities/StringUtils.hpp \
+ /media/mahmoud-ossama/Lexar\ NVME\ 512GB/GitHub/GPU-DBMS-project/src/Operations/../../include/Operations/GPUAggregator.hpp \
  /usr/include/c++/12/algorithm /usr/include/c++/12/bits/stl_algo.h \
  /usr/include/c++/12/bits/algorithmfwd.h \
  /usr/include/c++/12/bits/stl_heap.h \
