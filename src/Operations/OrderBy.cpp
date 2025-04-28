@@ -26,14 +26,19 @@ std::shared_ptr<Table> OrderByPlan::execute()
 
     // Try int column (fastest, canonical case for benchmarking!)
     try {
-        // Fallback to CPU or string-based sort if int conversion fails
-        auto sorted_data = input_table->getData();
-        std::sort(sorted_data.begin(), sorted_data.end(),
-            [&](const auto& a, const auto& b) {
-                return ascending
-                    ? a[sort_cols[0].column_index] < b[sort_cols[0].column_index]
-                    : a[sort_cols[0].column_index] > b[sort_cols[0].column_index];
-            });
+        // Use your Table column cache
+        const auto& col_data = input_table->getIntColumn(colname);
+
+        // GPU sort
+        std::vector<int> indices = GPUAggregator::gpuArgsortInt(col_data, ascending);
+
+        // Reorder rows
+        std::vector<std::vector<std::string>> sorted_data;
+        sorted_data.reserve(indices.size());
+        for (int idx : indices)
+            sorted_data.push_back(input_table->getRow(idx));
+
+        // Return sorted table
         return std::make_shared<Table>(
             input_table->getName() + "_sorted",
             input_table->getHeaders(),

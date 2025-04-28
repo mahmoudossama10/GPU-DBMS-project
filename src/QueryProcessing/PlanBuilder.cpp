@@ -322,7 +322,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     // Check for subqueries in the FROM clause
     bool has_subquery_in_from = hasSubqueryInTableRef(stmt->fromTable);
 
-    setExecutionMode(ExecutionMode::GPU);
+    setExecutionMode(ExecutionMode::CPU);
 
     // If using GPU and there are no complex subqueries, use GPU path
     if (execution_mode_ == ExecutionMode::GPU && !has_subquery_in_from)
