@@ -1,3 +1,0 @@
-/home/kareem/GPU-DBMS-project/build/CMakeFiles/sql_processor.dir
-/home/kareem/GPU-DBMS-project/build/CMakeFiles/edit_cache.dir
-/home/kareem/GPU-DBMS-project/build/CMakeFiles/rebuild_cache.dir
