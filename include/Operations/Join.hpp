@@ -12,7 +12,6 @@ public:
              std::unique_ptr<ExecutionPlan> right,
              const std::string &left_alias = "",
              const std::string &right_alias = "");
-
     std::shared_ptr<Table> execute() override;
 
 private:
@@ -24,9 +23,10 @@ private:
     // Helper methods
     std::vector<std::string> combineHeaders(const Table &left,
                                             const Table &right) const;
-    std::vector<std::vector<std::string>> computeProduct(
+    std::unordered_map<std::string, std::vector<unionV>> computeProduct(
         const Table &left,
-        const Table &right) const;
+        const Table &right,
+        std::unordered_map<std::string, ColumnType> &resultColumnTypes) const;
     std::string prefixHeader(const std::string &header,
                              const std::string &alias) const;
 };

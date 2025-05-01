@@ -1,356 +1,397 @@
-#include "../../include/Operations/Aggregator.hpp"
-#include "../../include/Utilities/ErrorHandling.hpp"
-#include "../../include/Utilities/StringUtils.hpp"
-#include <algorithm>
-#include <stdexcept>
-#include <cmath> // For NaN
-#include "../../include/Operations/GPUAggregator.hpp"
-#include <iostream>
-#include <unordered_map>
-using namespace StringUtils; // For case-insensitive comparison
+// #include "../../include/Operations/Aggregator.hpp"
+// #include "../../include/Utilities/ErrorHandling.hpp"
+// #include "../../include/Utilities/StringUtils.hpp"
+// #include <algorithm>
+// #include <stdexcept>
+// #include <cmath> // For NaN
+// #include "../../include/Operations/GPUAggregator.hpp"
+// #include <iostream>
+// #include <unordered_map>
+// using namespace StringUtils; // For case-insensitive comparison
 
-// Constructor
-AggregatorPlan::AggregatorPlan(std::unique_ptr<ExecutionPlan> input,
-                               const std::vector<hsql::Expr *> &aggregate_exprs)
-    : input_(std::move(input)), aggregate_exprs_(aggregate_exprs) {}
+// // Constructor
+// AggregatorPlan::AggregatorPlan(std::unique_ptr<ExecutionPlan> input,
+//                                const std::vector<hsql::Expr *> &aggregate_exprs)
+//     : input_(std::move(input)), aggregate_exprs_(aggregate_exprs) {}
 
-// Main execution logic
-std::shared_ptr<Table> AggregatorPlan::execute()
-{
-    auto input_table = input_->execute();
-    auto aggregates = parseAggregateExpressions();
+// // Main execution logic
+// std::shared_ptr<Table> AggregatorPlan::execute()
+// {
+//     auto input_table = input_->execute();
+//     auto aggregates = parseAggregateExpressions();
 
-    std::vector<std::string> headers;
-    std::vector<std::string> result_row;
+//     std::vector<std::string> headers;
+//     std::vector<std::string> result_row;
 
+//     // ------ NEW: map from column name to computed IntAggregates (GPU results) ------
+//     std::unordered_map<std::string, GPUAggregator::IntAggregates> int_col_aggregates;
 
-    // ------ NEW: map from column name to computed IntAggregates (GPU results) ------
-    std::unordered_map<std::string, GPUAggregator::IntAggregates> int_col_aggregates;
+//     // ------ NEW: track which columns we've attempted batched GPU on ------
+//     std::unordered_map<std::string, bool> did_gpu_aggregate;
 
-    // ------ NEW: track which columns we've attempted batched GPU on ------
-    std::unordered_map<std::string, bool> did_gpu_aggregate;
+//     for (const auto &agg : aggregates)
+//     {
 
-    for (const auto &agg : aggregates)
-    {
+//         double value = NAN;
 
-        double value = NAN;
+//         int count = 0;
 
-        int count = 0;
+//         bool isIntCol = false;
+//         bool useGPU = true;
 
-        bool isIntCol = false;
-        bool useGPU = true;
+//         // -------- Handle COUNT(*) fast-path -----------
 
+//         if (agg.type == AggregateInfo::AggType::COUNT && agg.column.empty())
+//         {
 
-        // -------- Handle COUNT(*) fast-path -----------
+//             result_row.push_back(std::to_string(input_table->getSize()));
 
-        if (agg.type == AggregateInfo::AggType::COUNT && agg.column.empty()) {
+//             headers.push_back(!agg.alias.empty() ? agg.alias : "COUNT(*)");
 
-            result_row.push_back(std::to_string(input_table->getSize()));
+//             continue;
+//         }
 
-            headers.push_back(!agg.alias.empty() ? agg.alias : "COUNT(*)");
+//         // -------- Batched int-aggregate logic ----------
 
-            continue;
+//         if (!agg.column.empty())
+//         {
 
-        }
+//             // Only extract/calculate for a column if not already done!
 
+//             if (did_gpu_aggregate.find(agg.column) == did_gpu_aggregate.end())
+//             {
+//                 try
+//                 {
+//                     // ----------- NEW: Use the columnar cache! -----------
+//                     const auto &col_data = input_table->getIntColumn(agg.column);
+//                     isIntCol = true;
+//                     if (useGPU)
+//                     {
+//                         int_col_aggregates[agg.column] = GPUAggregator::multiAggregateInt(col_data);
+//                         did_gpu_aggregate[agg.column] = true;
+//                     }
+//                     else
+//                     {
+//                         did_gpu_aggregate[agg.column] = false;
+//                     }
+//                 }
+//                 catch (...)
+//                 {
+//                     // If getIntColumn fails, treat as non-int
+//                     isIntCol = false;
+//                     did_gpu_aggregate[agg.column] = false;
+//                 }
+//             }
+//             else
+//             {
+//                 isIntCol = did_gpu_aggregate[agg.column];
+//             }
+//         }
 
-        // -------- Batched int-aggregate logic ----------
+//         // --------- Aggregate result assignment ---------
 
-        if (!agg.column.empty()) {
+//         // Fill result_row, either using GPU-batched result or CPU fallback
 
-            // Only extract/calculate for a column if not already done!
+//         if (useGPU && !agg.column.empty() && isIntCol && int_col_aggregates.find(agg.column) != int_col_aggregates.end())
+//         {
 
-            if (did_gpu_aggregate.find(agg.column) == did_gpu_aggregate.end()) {
-                try {
-                    // ----------- NEW: Use the columnar cache! -----------
-                    const auto& col_data = input_table->getIntColumn(agg.column);
-                    isIntCol = true;
-                    if (useGPU) {
-                        int_col_aggregates[agg.column] = GPUAggregator::multiAggregateInt(col_data);
-                        did_gpu_aggregate[agg.column] = true;
-                    } else {
-                        did_gpu_aggregate[agg.column] = false;
-                    }
-                } catch (...) {
-                    // If getIntColumn fails, treat as non-int
-                    isIntCol = false;
-                    did_gpu_aggregate[agg.column] = false;
-                }
-            } else {
-                isIntCol = did_gpu_aggregate[agg.column];
-            }
+//             // Use the batch results
 
-        }
+//             const auto &aggs = int_col_aggregates[agg.column];
 
+//             switch (agg.type)
 
-        // --------- Aggregate result assignment ---------
+//             {
 
-        // Fill result_row, either using GPU-batched result or CPU fallback
+//             case AggregateInfo::AggType::COUNT:
 
-        if (useGPU && !agg.column.empty() && isIntCol && int_col_aggregates.find(agg.column) != int_col_aggregates.end()) {
+//                 result_row.push_back(std::to_string(aggs.count));
 
-            // Use the batch results
+//                 break;
 
-            const auto& aggs = int_col_aggregates[agg.column];
+//             case AggregateInfo::AggType::SUM:
 
-            switch (agg.type)
+//                 result_row.push_back(std::to_string(aggs.sum));
 
-            {
+//                 break;
 
-            case AggregateInfo::AggType::COUNT:
+//             case AggregateInfo::AggType::AVG:
 
-                result_row.push_back(std::to_string(aggs.count));
+//                 result_row.push_back(std::to_string(aggs.avg));
 
-                break;
+//                 break;
 
-            case AggregateInfo::AggType::SUM:
+//             case AggregateInfo::AggType::MAX:
 
-                result_row.push_back(std::to_string(aggs.sum));
+//                 result_row.push_back(std::to_string(aggs.max));
 
-                break;
+//                 break;
 
-            case AggregateInfo::AggType::AVG:
+//             case AggregateInfo::AggType::MIN:
 
-                result_row.push_back(std::to_string(aggs.avg));
+//                 result_row.push_back(std::to_string(aggs.min));
 
-                break;
+//                 break;
+//             }
+//         }
+//         else
+//         {
 
-            case AggregateInfo::AggType::MAX:
+//             // ----------- CPU fallback as before -----------
 
-                result_row.push_back(std::to_string(aggs.max));
+//             switch (agg.type)
 
-                break;
+//             {
 
-            case AggregateInfo::AggType::MIN:
+//             case AggregateInfo::AggType::COUNT:
 
-                result_row.push_back(std::to_string(aggs.min));
+//                 count = computeCount(*input_table, agg.column);
 
-                break;
+//                 result_row.push_back(std::to_string(count));
 
-            }
+//                 break;
 
-        } else {
+//             case AggregateInfo::AggType::SUM:
 
-            // ----------- CPU fallback as before -----------
+//                 value = computeSum(*input_table, agg.column);
 
-            switch (agg.type)
+//                 result_row.push_back(std::to_string(value));
 
-            {
+//                 break;
 
-            case AggregateInfo::AggType::COUNT:
+//             case AggregateInfo::AggType::AVG:
 
-                count = computeCount(*input_table, agg.column);
+//                 value = computeAvg(*input_table, agg.column);
 
-                result_row.push_back(std::to_string(count));
+//                 result_row.push_back(std::to_string(value));
 
-                break;
+//                 break;
 
-            case AggregateInfo::AggType::SUM:
+//             case AggregateInfo::AggType::MAX:
 
-                value = computeSum(*input_table, agg.column);
+//                 value = computeMax(*input_table, agg.column);
 
-                result_row.push_back(std::to_string(value));
+//                 result_row.push_back(std::to_string(value));
 
-                break;
+//                 break;
 
-            case AggregateInfo::AggType::AVG:
+//             case AggregateInfo::AggType::MIN:
 
-                value = computeAvg(*input_table, agg.column);
+//                 value = computeMin(*input_table, agg.column);
 
-                result_row.push_back(std::to_string(value));
+//                 result_row.push_back(std::to_string(value));
 
-                break;
+//                 break;
+//             }
+//         }
 
-            case AggregateInfo::AggType::MAX:
+//         // ----------- Always build safe/correct headers -----------
 
-                value = computeMax(*input_table, agg.column);
+//         headers.push_back(!agg.alias.empty() ? agg.alias
 
-                result_row.push_back(std::to_string(value));
+//                                              : (agg.column.empty() ? aggToString(agg.type) + "(*)"
 
-                break;
+//                                                                    : aggToString(agg.type) + "(" + agg.column + ")"));
+//     }
 
-            case AggregateInfo::AggType::MIN:
+//     // Create output table
+//     auto output_table = std::make_shared<Table>(
+//         input_table->getName() + "_aggregated",
+//         headers,
+//         std::vector<std::vector<std::string>>{result_row});
 
-                value = computeMin(*input_table, agg.column);
+//     return output_table;
+// }
 
-                result_row.push_back(std::to_string(value));
+// // --- Helper Functions ---
 
-                break;
+// // Parse HSQL expressions into aggregate operations
 
-            }
+// std::vector<AggregatorPlan::AggregateInfo> AggregatorPlan::parseAggregateExpressions() const
+// {
+//     std::vector<AggregateInfo> aggregates;
 
-        }
+//     for (const auto *expr : aggregate_exprs_)
+//     {
+//         if (expr->type != hsql::kExprFunctionRef)
+//         {
+//             throw SemanticError("Non-aggregate expression in aggregate context");
+//         }
 
+//         AggregateInfo info;
+//         info.alias = expr->alias ? expr->alias : "";
+//         std::string func_name = toLower(expr->name);
 
-        // ----------- Always build safe/correct headers -----------
+//         // Map function name to type
+//         if (func_name == "count")
+//             info.type = AggregateInfo::AggType::COUNT;
+//         else if (func_name == "sum")
+//             info.type = AggregateInfo::AggType::SUM;
+//         else if (func_name == "avg")
+//             info.type = AggregateInfo::AggType::AVG;
+//         else if (func_name == "max")
+//             info.type = AggregateInfo::AggType::MAX;
+//         else if (func_name == "min")
+//             info.type = AggregateInfo::AggType::MIN;
+//         else
+//             throw SemanticError("Unsupported aggregate function: " + func_name);
 
-        headers.push_back(!agg.alias.empty() ? agg.alias
+//         // Handle COUNT(*) vs COUNT(col)
+//         if (expr->exprList && !expr->exprList->empty())
+//         {
+//             const auto *arg = expr->exprList->at(0);
+//             if (arg->type == hsql::kExprStar)
+//             {
+//                 info.column = ""; // COUNT(*)
+//             }
+//             else
+//             {
+//                 info.column = getColumnName(arg);
+//             }
+//         }
 
-                                            : (agg.column.empty() ? aggToString(agg.type) + "(*)"
+//         aggregates.push_back(info);
+//     }
 
-                                                                : aggToString(agg.type) + "(" + agg.column + ")"));
+//     return aggregates;
+// }
 
-    }
+// std::string AggregatorPlan::getColumnName(const hsql::Expr *expr) const
+// {
+//     if (expr->type != hsql::kExprColumnRef)
+//     {
+//         throw SemanticError("Complex expressions in aggregates not supported");
+//     }
 
-    // Create output table
-    auto output_table = std::make_shared<Table>(
-        input_table->getName() + "_aggregated",
-        headers,
-        std::vector<std::vector<std::string>>{result_row});
+//     // Handle aliased columns (table.column)
+//     if (expr->table != nullptr && expr->table[0] != '\0')
+//     {
+//         return std::string(expr->table) + "." + expr->name;
+//     }
+//     return expr->name;
+// }
 
-    return output_table;
-}
+// std::string AggregatorPlan::aggToString(AggregateInfo::AggType type) const
+// {
+//     switch (type)
+//     {
+//     case AggregateInfo::AggType::COUNT:
+//         return "COUNT";
+//     case AggregateInfo::AggType::SUM:
+//         return "SUM";
+//     case AggregateInfo::AggType::AVG:
+//         return "AVG";
+//     case AggregateInfo::AggType::MAX:
+//         return "MAX";
+//     case AggregateInfo::AggType::MIN:
+//         return "MIN";
+//     default:
+//         throw std::runtime_error("Unknown aggregate type");
+//     }
+// }
 
-// --- Helper Functions ---
+// // --- Aggregate Computations ---
 
-// Parse HSQL expressions into aggregate operations
+// double AggregatorPlan::computeSum(const Table &table, const std::string &column) const
+// {
+//     double sum = 0.0;
 
-std::vector<AggregatorPlan::AggregateInfo> AggregatorPlan::parseAggregateExpressions() const
-{
-    std::vector<AggregateInfo> aggregates;
+//     // Get the column data directly from the column-major structure
+//     const auto &columnData = table.getData();
 
-    for (const auto *expr : aggregate_exprs_)
-    {
-        if (expr->type != hsql::kExprFunctionRef)
-        {
-            throw SemanticError("Non-aggregate expression in aggregate context");
-        }
+//     // Check if column exists
+//     if (columnData.find(column) == columnData.end())
+//     {
+//         throw std::runtime_error("Column not found: " + column);
+//     }
 
-        AggregateInfo info;
-        info.alias = expr->alias ? expr->alias : "";
-        std::string func_name = toLower(expr->name);
+//     // Access the specific column vector
+//     const auto &columnValues = columnData.at(column);
 
-        // Map function name to type
-        if (func_name == "count")
-            info.type = AggregateInfo::AggType::COUNT;
-        else if (func_name == "sum")
-            info.type = AggregateInfo::AggType::SUM;
-        else if (func_name == "avg")
-            info.type = AggregateInfo::AggType::AVG;
-        else if (func_name == "max")
-            info.type = AggregateInfo::AggType::MAX;
-        else if (func_name == "min")
-            info.type = AggregateInfo::AggType::MIN;
-        else
-            throw SemanticError("Unsupported aggregate function: " + func_name);
+//     // Sum each value in the column
+//     for (const auto &value : columnValues)
+//     {
+//         sum += numericColumnSafeGet(table, value);
+//     }
 
-        // Handle COUNT(*) vs COUNT(col)
-        if (expr->exprList && !expr->exprList->empty())
-        {
-            const auto *arg = expr->exprList->at(0);
-            if (arg->type == hsql::kExprStar)
-            {
-                info.column = ""; // COUNT(*)
-            }
-            else
-            {
-                info.column = getColumnName(arg);
-            }
-        }
+//     return sum;
+// }
 
-        aggregates.push_back(info);
-    }
+// double AggregatorPlan::computeAvg(const Table &table, const std::string &column) const
+// {
+//     double sum = computeSum(table, column);
+//     int count = computeCount(table, column);
+//     return (count == 0) ? NAN : sum / count;
+// }
 
-    return aggregates;
-}
+// double AggregatorPlan::computeMax(const Table &table, const std::string &column) const
+// {
+//     double max_val = -INFINITY;
 
-std::string AggregatorPlan::getColumnName(const hsql::Expr *expr) const
-{
-    if (expr->type != hsql::kExprColumnRef)
-    {
-        throw SemanticError("Complex expressions in aggregates not supported");
-    }
+//     // Get the column data directly from the column-major structure
+//     const auto &columnData = table.getData();
 
-    // Handle aliased columns (table.column)
-    if (expr->table != nullptr && expr->table[0] != '\0')
-    {
-        return std::string(expr->table) + "." + expr->name;
-    }
-    return expr->name;
-}
+//     // Check if column exists
+//     if (columnData.find(column) == columnData.end())
+//     {
+//         throw std::runtime_error("Column not found: " + column);
+//     }
 
-std::string AggregatorPlan::aggToString(AggregateInfo::AggType type) const
-{
-    switch (type)
-    {
-    case AggregateInfo::AggType::COUNT:
-        return "COUNT";
-    case AggregateInfo::AggType::SUM:
-        return "SUM";
-    case AggregateInfo::AggType::AVG:
-        return "AVG";
-    case AggregateInfo::AggType::MAX:
-        return "MAX";
-    case AggregateInfo::AggType::MIN:
-        return "MIN";
-    default:
-        throw std::runtime_error("Unknown aggregate type");
-    }
-}
+//     // Access the specific column vector
+//     const auto &columnValues = columnData.at(column);
 
-// --- Aggregate Computations ---
+//     // Find maximum value in the column
+//     for (const auto &value : columnValues)
+//     {
+//         double val = numericColumnSafeGet(table, value);
+//         if (val > max_val)
+//             max_val = val;
+//     }
 
-double AggregatorPlan::computeSum(const Table &table, const std::string &column) const
-{
-    double sum = 0.0;
-    size_t col_idx = table.getColumnIndex(column);
+//     return max_val;
+// }
 
-    for (const auto &row : table.getData())
-    {
-        sum += numericColumnSafeGet(table, row[col_idx]);
-    }
-    return sum;
-}
+// double AggregatorPlan::computeMin(const Table &table, const std::string &column) const
+// {
+//     double min_val = INFINITY;
 
-double AggregatorPlan::computeAvg(const Table &table, const std::string &column) const
-{
-    double sum = computeSum(table, column);
-    int count = computeCount(table, column);
-    return (count == 0) ? NAN : sum / count;
-}
+//     // Get the column data directly from the column-major structure
+//     const auto &columnData = table.getData();
 
-double AggregatorPlan::computeMax(const Table &table, const std::string &column) const
-{
-    size_t col_idx = table.getColumnIndex(column);
-    double max_val = -INFINITY;
+//     // Check if column exists
+//     if (columnData.find(column) == columnData.end())
+//     {
+//         throw std::runtime_error("Column not found: " + column);
+//     }
 
-    for (const auto &row : table.getData())
-    {
-        double val = numericColumnSafeGet(table, row[col_idx]);
-        if (val > max_val)
-            max_val = val;
-    }
-    return max_val;
-}
+//     // Access the specific column vector
+//     const auto &columnValues = columnData.at(column);
 
-double AggregatorPlan::computeMin(const Table &table, const std::string &column) const
-{
-    size_t col_idx = table.getColumnIndex(column);
-    double min_val = INFINITY;
+//     // Find minimum value in the column
+//     for (const auto &value : columnValues)
+//     {
+//         double val = numericColumnSafeGet(table, value);
+//         if (val < min_val)
+//             min_val = val;
+//     }
 
-    for (const auto &row : table.getData())
-    {
-        double val = numericColumnSafeGet(table, row[col_idx]);
-        if (val < min_val)
-            min_val = val;
-    }
-    return min_val;
-}
+//     return min_val;
+// }
 
-int AggregatorPlan::computeCount(const Table &table, const std::string &column) const
-{
-    return column.empty() ? table.getSize() : table.getSize(); // COUNT(*) vs COUNT(col)
-}
+// int AggregatorPlan::computeCount(const Table &table, const std::string &column) const
+// {
+//     return column.empty() ? table.getSize() : table.getSize(); // COUNT(*) vs COUNT(col)
+// }
 
-// Safe numeric conversion with error handling
-double AggregatorPlan::numericColumnSafeGet(const Table &table, const std::string &value) const
-{
-    try
-    {
-        return std::stod(value);
-    }
-    catch (...)
-    {
-        throw SemanticError("Non-numeric value in numeric aggregate column: " + value);
-    }
-}
+// // Safe numeric conversion with error handling
+// double AggregatorPlan::numericColumnSafeGet(const Table &table, const std::string &value) const
+// {
+//     try
+//     {
+//         return std::stod(value);
+//     }
+//     catch (...)
+//     {
+//         throw SemanticError("Non-numeric value in numeric aggregate column: " + value);
+//     }
+// }

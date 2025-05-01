@@ -4,6 +4,8 @@
 #include <hsql/SQLParser.h>
 #include <memory>
 #include <vector>
+#include <string>
+#include <stdexcept>
 
 class ProjectPlan : public ExecutionPlan
 {
@@ -18,7 +20,7 @@ private:
 
     std::vector<std::string> getColumnNames() const;
     std::shared_ptr<Table> processProjection(std::shared_ptr<Table> input) const;
-    std::string evaluateExpression(const std::vector<std::string> &row,
-                                   const hsql::Expr *expr,
-                                   const std::vector<std::string> &headers) const;
+
+    // Helper to get the column name from an expression
+    std::string getColumnNameFromExpr(const hsql::Expr *expr) const;
 };

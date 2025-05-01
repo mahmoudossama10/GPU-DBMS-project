@@ -60,7 +60,6 @@ void CommandLineInterface::processQuery(const std::string &query)
 {
     try
     {
-
         auto start = high_resolution_clock::now();
 
         QueryExecutor executor(storageManager);
@@ -69,7 +68,9 @@ void CommandLineInterface::processQuery(const std::string &query)
         if (result)
         {
             const auto &columns = result->getHeaders();
-            const auto &rows = result->getData();
+            const auto &columnData = result->getData(); // Now returns unordered_map<string, vector<string>>
+            const int totalRows = result->getSize();
+            const auto columnTypes = result->getColumnTypes();
 
             // Display column headers
             for (size_t i = 0; i < columns.size(); ++i)
@@ -90,36 +91,49 @@ void CommandLineInterface::processQuery(const std::string &query)
             std::cout << "\n";
 
             // Display first 10 rows
-            const size_t numRowsToShow = std::min<size_t>(rows.size(), 10);
+            const size_t numRowsToShow = std::min<size_t>(totalRows, 10);
             for (size_t rowIdx = 0; rowIdx < numRowsToShow; ++rowIdx)
             {
-                const auto &row = rows[rowIdx];
-                for (size_t i = 0; i < row.size(); ++i)
+                // For each row, go through all columns and get the value at that row index
+                for (size_t colIdx = 0; colIdx < columns.size(); ++colIdx)
                 {
-                    std::cout << row[i];
-                    if (i < row.size() - 1)
+                    const auto &colName = columns[colIdx];
+                    switch (columnTypes.at(columns[colIdx]))
+                    {
+                    case ColumnType::INTEGER:
+                        std::cout << columnData.at(colName)[rowIdx].i;
+                        break;
+
+                    case ColumnType::STRING:
+                        std::cout << *(columnData.at(colName)[rowIdx].s);
+                        break;
+
+                    default:
+                        throw std::runtime_error("Unsupported column type");
+                    }
+                    if (colIdx < columns.size() - 1)
                         std::cout << " | ";
                 }
                 std::cout << "\n";
             }
 
             // Show truncation message if needed
-            if (rows.size() > 10)
+            if (totalRows > 10)
             {
                 std::cout << "...\n";
-                std::cout << "(Showing first 10 of " << rows.size() << " rows)\n";
+                std::cout << "(Showing first 10 of " << totalRows << " rows)\n";
             }
 
-            std::cout << rows.size() << " rows returned\n";
+            std::cout << totalRows << " rows returned\n";
 
             // Save full results to CSV
             std::string outputPath = "./data/output/query_output.csv";
-            CSVProcessor::saveCSV(outputPath, result->getHeaders(), result->getData());
+            CSVProcessor::saveCSV(outputPath, result->getHeaders(), columnData, columnTypes); // CSVProcessor needs to be updated too
             std::cout << "Saved output to '" << outputPath << "'\n";
 
             auto end = high_resolution_clock::now();
 
-            auto duration = duration_cast<milliseconds>(end - start); // You can use microseconds, seconds, etc.
+            auto duration = duration_cast<milliseconds>(end - start);
 
             std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
         }

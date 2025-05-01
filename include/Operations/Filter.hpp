@@ -26,36 +26,42 @@ public:
         const hsql::Expr *condition);
 
 private:
+    // Evaluate the condition for a specific row index
     static bool evaluateCondition(
-        const std::vector<std::string> &row,
-        const hsql::Expr *condition,
-        const std::vector<std::string> &headers,
-        const std::unordered_map<std::string, size_t> &columnIndexMap);
+        const std::shared_ptr<Table> &table,
+        size_t rowIndex,
+        const hsql::Expr *condition);
 
     static bool handleOperator(
-        const std::vector<std::string> &row,
-        const hsql::Expr *expr,
-        const std::vector<std::string> &headers,
-        const std::unordered_map<std::string, size_t> &columnIndexMap);
+        const std::shared_ptr<Table> &table,
+        size_t rowIndex,
+        const hsql::Expr *expr);
 
     static bool handleNullCondition(
-        const std::vector<std::string> &row,
-        const hsql::Expr *expr,
-        const std::unordered_map<std::string, size_t> &columnIndexMap);
+        const std::shared_ptr<Table> &table,
+        size_t rowIndex,
+        const hsql::Expr *expr);
 
     static bool matchLikePattern(const std::string &value, const std::string &pattern);
+
+    // Type-specific comparison handlers
     static bool compareStrings(const std::string &lhs, const std::string &rhs, hsql::OperatorType op);
-    static bool compareNumerics(double lhs, double rhs, hsql::OperatorType op);
+    static bool compareIntegers(int64_t lhs, int64_t rhs, hsql::OperatorType op);
+    static bool compareDoubles(double lhs, double rhs, hsql::OperatorType op);
+    static bool compareDateTimes(const dateTime &lhs, const dateTime &rhs, hsql::OperatorType op);
+
     static bool handleComparison(
-        const std::vector<std::string> &row,
+        const std::shared_ptr<Table> &table,
+        size_t rowIndex,
+        const hsql::Expr *expr);
+
+    // Get the appropriate value from an expression
+    static unionV getExprValue(
+        const std::shared_ptr<Table> &table,
+        size_t rowIndex,
         const hsql::Expr *expr,
-        const std::vector<std::string> &headers,
-        const std::unordered_map<std::string, size_t> &columnIndexMap);
+        ColumnType &outType);
 
-    static bool compareValues(
-        const std::string &lhs,
-        const std::string &rhs,
-        hsql::OperatorType op);
-
-    static bool handleLikeOperator(const std::string &value, const std::string &pattern);
+    // Convert value to string for LIKE operations and debugging
+    static std::string unionToString(const unionV &value, ColumnType type);
 };

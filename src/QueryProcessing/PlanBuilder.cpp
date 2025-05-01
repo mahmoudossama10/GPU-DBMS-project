@@ -103,30 +103,93 @@ namespace
         return false;
     }
 
-    bool selectListNeedsProjection(const std::vector<hsql::Expr *>& selectList) {
-
+    bool selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList)
+    {
         // If * present, never project
-    
-        for (auto* expr : selectList) if (expr->type == hsql::kExprStar) return false;
-    
-    
+        for (auto *expr : selectList)
+            if (expr->type == hsql::kExprStar)
+                return false;
+
         // If *table present, also never project
-    
-        for (auto* expr : selectList) {
-    
-            if (expr->type == hsql::kExprColumnRef && expr->name && std::strcmp(expr->name, "*") == 0) return false;
-    
+        for (auto *expr : selectList)
+        {
+            if (expr->type == hsql::kExprColumnRef && expr->name && std::strcmp(expr->name, "*") == 0)
+                return false;
         }
-    
-    
+
         // If any non-aggregate expression, projection is required
-    
-        for (auto* expr : selectList) if (expr->type != hsql::kExprFunctionRef) return true;
-    
+        for (auto *expr : selectList)
+            if (expr->type != hsql::kExprFunctionRef)
+                return true;
+
         // All are aggregates: NO projection needed
-    
         return false;
-    
+    }
+
+    // Helper function to convert string to unionV based on column type
+    unionV stringToUnionValue(const std::string &value, ColumnType type)
+    {
+        unionV result;
+
+        switch (type)
+        {
+        case ColumnType::STRING:
+            result.s = new std::string(value);
+            break;
+
+        case ColumnType::INTEGER:
+            result.i = std::stoll(value);
+            break;
+
+        case ColumnType::DOUBLE:
+            result.d = std::stod(value);
+            break;
+
+        case ColumnType::DATETIME:
+        {
+            // Parse datetime string and create a dateTime struct
+            // This is a simplified implementation - you may need more sophisticated parsing
+            result.t = new dateTime();
+            // Assuming format: YYYY-MM-DD HH:MM:SS
+            sscanf(value.c_str(), "%hu-%hu-%hu %hhu:%hhu:%hhu",
+                   &result.t->year, &result.t->month, &result.t->day,
+                   &result.t->hour, &result.t->minute, &result.t->second);
+            break;
+        }
+
+        default:
+            throw std::runtime_error("Unknown column type");
+        }
+
+        return result;
+    }
+
+    // Helper function to get string representation from unionV
+    std::string unionValueToString(const unionV &value, ColumnType type)
+    {
+        switch (type)
+        {
+        case ColumnType::STRING:
+            return *(value.s);
+
+        case ColumnType::INTEGER:
+            return std::to_string(value.i);
+
+        case ColumnType::DOUBLE:
+            return std::to_string(value.d);
+
+        case ColumnType::DATETIME:
+        {
+            char buffer[64];
+            snprintf(buffer, sizeof(buffer), "%04hu-%02hu-%02hu %02hhu:%02hhu:%02hhu",
+                     value.t->year, value.t->month, value.t->day,
+                     value.t->hour, value.t->minute, value.t->second);
+            return std::string(buffer);
+        }
+
+        default:
+            throw std::runtime_error("Unknown column type");
+        }
     }
 }
 
@@ -155,7 +218,12 @@ public:
 
     std::shared_ptr<Table> execute() override
     {
-        return std::make_shared<Table>(storage_->getTable(table_name_));
+        auto table = std::make_shared<Table>(storage_->getTable(table_name_));
+        if (!alias_.empty())
+        {
+            table->setAlias(alias_);
+        }
+        return table;
     }
 
     const std::string &getAlias() const { return alias_; }
@@ -199,7 +267,7 @@ void collectInvolvedTables(const hsql::Expr *expr, std::unordered_set<std::strin
 
     if (expr->type == hsql::kExprColumnRef && expr->table != nullptr)
     {
-        tables.insert(expr->table); // or std::string(expr->table) if needed
+        tables.insert(expr->table);
     }
 
     collectInvolvedTables(expr->expr, tables);
@@ -219,19 +287,6 @@ std::shared_ptr<Table> GPUJoinPlan::execute()
     if (tables_.empty())
     {
         throw SemanticError("No tables to join in GPU plan");
-    }
-
-    // Handle single table case with potential filtering
-    if (tables_.size() == 1)
-    {
-        auto &table = tables_[0];
-        if (where_clause_)
-        {
-            // Apply GPU filter to single table
-            auto mask = gpu_manager_->gpuFilterTable(*table, where_clause_);
-            return gpu_manager_->applyFilter(*table, mask);
-        }
-        return table; // Return original table if no filter
     }
 
     // Multi-table join with batched processing
@@ -279,73 +334,87 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     // Check for subqueries in the FROM clause
     bool has_subquery_in_from = hasSubqueryInTableRef(stmt->fromTable);
 
-    setExecutionMode(ExecutionMode::CPU);
+    setExecutionMode(ExecutionMode::GPU);
 
     // If using GPU and there are no complex subqueries, use GPU path
     if (execution_mode_ == ExecutionMode::GPU && !has_subquery_in_from)
-
     {
 
-        auto plan = buildGPUScanPlan(stmt->fromTable, processed_where);
+        std::unique_ptr<ExecutionPlan> plan;
 
-        if (hasAggregates(*(stmt->selectList)))
-
+        if (stmt->fromTable->type == hsql::kTableName)
         {
+            // Single table only — safe to scan directly
+            auto plan = buildScanPlan(stmt->fromTable);
+            if (processed_where)
+            {
+                plan = buildFilterPlan(std::move(plan), processed_where);
+            }
 
-            plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+            // if (hasAggregates(*(stmt->selectList)))
+            // {
+            //     plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+            // }
+
+            // Only create ProjectPlan if needed
+            if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList)))
+            {
+                plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
+            }
+
+            // if (stmt->order && !stmt->order->empty())
+            // {
+            //     plan = buildOrderByPlan(std::move(plan), *stmt->order);
+            // }
+
+            return plan;
         }
-
-        // Only create ProjectPlan if needed
-
-        // After buildAggregatePlan (or scan/aggregation/filter/etc):
-        if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList))) {
-            plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
-        }
-
-        if (stmt->order && !stmt->order->empty())
-
+        else
         {
+            auto plan = buildGPUScanPlan(stmt->fromTable, processed_where);
 
-            plan = buildOrderByPlan(std::move(plan), *stmt->order);
+            // if (hasAggregates(*(stmt->selectList)))
+            // {
+            //     plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+            // }
+
+            // Only create ProjectPlan if needed
+            if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList)))
+            {
+                plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
+            }
+
+            // if (stmt->order && !stmt->order->empty())
+            // {
+            //     plan = buildOrderByPlan(std::move(plan), *stmt->order);
+            // }
+            return plan;
         }
-
-        return plan;
     }
-
     else
-
     {
-
-        // CPU path (repeat the same change!)
-
+        // CPU path
         auto plan = buildScanPlan(stmt->fromTable);
 
         if (processed_where)
-
         {
-
             plan = buildFilterPlan(std::move(plan), processed_where);
         }
 
-        if (hasAggregates(*(stmt->selectList)))
+        // if (hasAggregates(*(stmt->selectList)))
+        // {
+        //     plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
+        // }
 
+        if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList)))
         {
-
-            plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
-        }
-
-        if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList))) {
-
             plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
-     
         }
 
-        if (stmt->order && !stmt->order->empty())
-
-        {
-
-            plan = buildOrderByPlan(std::move(plan), *stmt->order);
-        }
+        // if (stmt->order && !stmt->order->empty())
+        // {
+        //     plan = buildOrderByPlan(std::move(plan), *stmt->order);
+        // }
         return plan;
     }
 }
@@ -449,6 +518,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUScanPlan(const hsql::TableRe
     }
 
     // Create GPU join plan that handles filter conditions
+
     return std::make_unique<GPUJoinPlan>(tables, table_names, where, gpu_manager_);
 }
 
@@ -499,19 +569,19 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildProjectPlan(
     return std::make_unique<ProjectPlan>(std::move(input), processed_select_list);
 }
 
-std::unique_ptr<ExecutionPlan> PlanBuilder::buildAggregatePlan(
-    std::unique_ptr<ExecutionPlan> input,
-    const std::vector<hsql::Expr *> &select_list)
-{
-    return std::make_unique<AggregatorPlan>(std::move(input), select_list);
-}
+// std::unique_ptr<ExecutionPlan> PlanBuilder::buildAggregatePlan(
+//     std::unique_ptr<ExecutionPlan> input,
+//     const std::vector<hsql::Expr *> &select_list)
+// {
+//     return std::make_unique<AggregatorPlan>(std::move(input), select_list);
+// }
 
-std::unique_ptr<ExecutionPlan> PlanBuilder::buildOrderByPlan(
-    std::unique_ptr<ExecutionPlan> input,
-    const std::vector<hsql::OrderDescription *> &order_exprs)
-{
-    return std::make_unique<OrderByPlan>(std::move(input), order_exprs);
-}
+// std::unique_ptr<ExecutionPlan> PlanBuilder::buildOrderByPlan(
+//     std::unique_ptr<ExecutionPlan> input,
+//     const std::vector<hsql::OrderDescription *> &order_exprs)
+// {
+//     return std::make_unique<OrderByPlan>(std::move(input), order_exprs);
+// }
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
 {
@@ -685,54 +755,50 @@ hsql::Expr *PlanBuilder::processSubqueryExpression(const hsql::Expr *expr)
     // For scalar subquery, get the single value from the result
     if (subquery_result->getSize() == 1 && subquery_result->getHeaders().size() == 1)
     {
-        // Extract the single value from the result
-        const std::string value = subquery_result->getData()[0][0];
-        if (isInteger(value))
+        // Get the column name (first and only header)
+        const std::string &columnName = subquery_result->getHeaders()[0];
+
+        // Get the column type
+        ColumnType type = subquery_result->getColumnType(columnName);
+
+        // Get the first value using the appropriate accessor based on type
+        switch (type)
         {
+        case ColumnType::INTEGER:
+        {
+            int64_t value = subquery_result->getInteger(columnName, 0);
             result = new hsql::Expr(hsql::kExprLiteralInt);
-            result->ival = std::stoi(value);
+            result->ival = value;
+            break;
         }
-        else if (isFloat(value))
+        case ColumnType::DOUBLE:
         {
+            double value = subquery_result->getDouble(columnName, 0);
             result = new hsql::Expr(hsql::kExprLiteralFloat);
-            result->fval = std::stof(value);
+            result->fval = value;
+            break;
         }
-        else
+        case ColumnType::STRING:
         {
+            std::string value = subquery_result->getString(columnName, 0);
             result = new hsql::Expr(hsql::kExprLiteralString);
             result->name = strdup(value.c_str());
+            break;
         }
-    }
-    else if (subquery_result->getSize() >= 1 && subquery_result->getHeaders().size() == 1)
-    {
-        // Handle IN operation with list of values
-        result = new hsql::Expr(hsql::kExprOperator);
-        result->opType = hsql::kOpIn;
-
-        // Create a list of literal values
-        result->exprList = new std::vector<hsql::Expr *>();
-        for (const auto &row : subquery_result->getData())
+        case ColumnType::DATETIME:
         {
-            const std::string &value = row[0];
-            hsql::Expr *literal = nullptr;
+            // For datetime, convert to string representation
+            const dateTime &dt = subquery_result->getDateTime(columnName, 0);
+            char buffer[64];
+            snprintf(buffer, sizeof(buffer), "%04hu-%02hu-%02hu %02hhu:%02hhu:%02hhu",
+                     dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
 
-            if (isInteger(value))
-            {
-                literal = new hsql::Expr(hsql::kExprLiteralInt);
-                literal->ival = std::stoi(value);
-            }
-            else if (isFloat(value))
-            {
-                literal = new hsql::Expr(hsql::kExprLiteralFloat);
-                literal->fval = std::stof(value);
-            }
-            else
-            {
-                literal = new hsql::Expr(hsql::kExprLiteralString);
-                literal->name = strdup(value.c_str());
-            }
-
-            result->exprList->push_back(literal);
+            result = new hsql::Expr(hsql::kExprLiteralString);
+            result->name = strdup(buffer);
+            break;
+        }
+        default:
+            throw SemanticError("Unsupported column type in subquery result");
         }
     }
     else

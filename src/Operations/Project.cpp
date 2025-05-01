@@ -9,31 +9,7 @@
 #include <algorithm> // for to_lower
 #include <cmath>     // for NaN
 #include <regex>
-static_assert(sizeof(Table) > 0, "Table is incomplete here");
-namespace
-{
 
-    static size_t getColumnIndex(const std::string &column_name,
-                                 const std::vector<std::string> &headers)
-    {
-        auto it = std::find_if(headers.begin(), headers.end(),
-                               [&column_name](const std::string &header)
-                               {
-                                   return std::equal(header.begin(), header.end(),
-                                                     column_name.begin(), column_name.end(),
-                                                     [](char a, char b)
-                                                     {
-                                                         return std::tolower(a) == std::tolower(b);
-                                                     });
-                               });
-
-        if (it != headers.end())
-        {
-            return std::distance(headers.begin(), it);
-        }
-        throw std::runtime_error("Column '" + column_name + "' not found in table");
-    }
-}
 ProjectPlan::ProjectPlan(std::unique_ptr<ExecutionPlan> input,
                          const std::vector<hsql::Expr *> &select_list)
     : input_(std::move(input)), select_list_(select_list) {}
@@ -41,8 +17,7 @@ ProjectPlan::ProjectPlan(std::unique_ptr<ExecutionPlan> input,
 std::shared_ptr<Table> ProjectPlan::execute()
 {
     auto input_table = input_->execute();
-    std::shared_ptr<Table> temp = processProjection(input_table);
-    return temp;
+    return processProjection(input_table);
 }
 
 std::vector<std::string> ProjectPlan::getColumnNames() const
@@ -60,88 +35,83 @@ std::vector<std::string> ProjectPlan::getColumnNames() const
         }
         else
         {
-            std::cout << expr->type << '\n';
             throw SemanticError("Unnamed projection expressions require aliases");
         }
     }
     return names;
 }
 
-std::string ProjectPlan::evaluateExpression(const std::vector<std::string> &row,
-                                            const hsql::Expr *expr,
-                                            const std::vector<std::string> &headers) const
+std::string ProjectPlan::getColumnNameFromExpr(const hsql::Expr *expr) const
 {
-    // Reuse Filter's column reference handling
     if (expr->type == hsql::kExprColumnRef)
     {
-        size_t col_idx;
-        try
+        if (expr->table && expr->name)
         {
-            // Try direct column match first
-            col_idx = getColumnIndex(expr->name, headers);
+            // Handle table.column notation
+            return std::string(expr->table) + "." + std::string(expr->name);
         }
-        catch (const std::exception &e)
+        else
         {
-            // If failed, try alias.column match
-            std::string aliasedName = std::string(expr->table) + "." + std::string(expr->name);
-            col_idx = getColumnIndex(aliasedName, headers);
-        }
-        return row[col_idx];
-    }
-    // Handle literals
-    else if (expr->type == hsql::kExprLiteralInt)
-    {
-        return std::to_string(expr->ival);
-    }
-    else if (expr->type == hsql::kExprLiteralFloat)
-    {
-        return std::to_string(expr->fval);
-    }
-    else if (expr->type == hsql::kExprLiteralString)
-    {
-        return expr->name;
-    }
-    // Handle simple arithmetic operations
-    else if (expr->type == hsql::kExprOperator)
-    {
-        std::string lhs = evaluateExpression(row, expr->expr, headers);
-        std::string rhs = evaluateExpression(row, expr->expr2, headers);
-
-        switch (expr->opType)
-        {
-        case hsql::kOpPlus:
-            return std::to_string(std::stod(lhs) + std::stod(rhs));
-        case hsql::kOpMinus:
-            return std::to_string(std::stod(lhs) - std::stod(rhs));
-        case hsql::kOpAsterisk:
-            return std::to_string(std::stod(lhs) * std::stod(rhs));
-        case hsql::kOpSlash:
-            return std::to_string(std::stod(lhs) / std::stod(rhs));
-        default:
-            throw SemanticError("Unsupported operator in projection");
+            // Just column name
+            return expr->name;
         }
     }
-    throw SemanticError("Unsupported expression type in projection");
+    return "";
 }
 
 std::shared_ptr<Table> ProjectPlan::processProjection(std::shared_ptr<Table> input) const
 {
-    std::vector<std::vector<std::string>> dataRows;
+    // Get the input data, header names, and column types
+    const auto &inputData = input->getData();
+    const auto &inputColumnTypes = input->getColumnTypes();
+
+    // Initialize maps for the new table
+    std::unordered_map<std::string, std::vector<unionV>> outputData;
+    std::unordered_map<std::string, ColumnType> outputColumnTypes;
+    std::vector<std::string> outputHeaders = getColumnNames();
+
+    // For each column in the select list
+    for (size_t i = 0; i < select_list_.size(); i++)
+    {
+        const auto *expr = select_list_[i];
+        std::string outputColName = outputHeaders[i]; // Use the already processed column name/alias
+
+        if (expr->type == hsql::kExprColumnRef)
+        {
+            // Get the source column name
+            std::string inputColName = getColumnNameFromExpr(expr);
+
+            // Try to find the column in the input data
+            auto it = inputData.find(inputColName);
+            if (it == inputData.end())
+            {
+                // Try without table prefix
+                inputColName = expr->name;
+                it = inputData.find(inputColName);
+
+                if (it == inputData.end())
+                {
+                    throw std::runtime_error("Column not found: " + inputColName);
+                }
+            }
+
+            // Copy the column data and type to the output
+            outputData[outputColName] = it->second;
+            outputColumnTypes[outputColName] = inputColumnTypes.at(inputColName);
+        }
+        else
+        {
+            // For now, we only support direct column references
+            throw SemanticError("Only column references are currently supported in projection");
+        }
+    }
+
+    // Create and return the new table
     auto output = std::make_shared<Table>(
         input->getName() + "_projected",
-        getColumnNames(),
-        dataRows);
-
-    const auto &headers = input->getHeaders();
-    for (const auto &row : input->getData())
-    {
-        std::vector<std::string> projected_row;
-        for (const auto *expr : select_list_)
-        {
-            projected_row.push_back(evaluateExpression(row, expr, headers));
-        }
-        output->addRow(projected_row);
-    }
+        outputHeaders,
+        outputData,
+        outputColumnTypes);
 
     return output;
 }

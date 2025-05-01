@@ -9,8 +9,8 @@ void StorageManager::loadTable(const std::string &tableName, const std::string &
         throw std::runtime_error("Table already loaded: " + tableName);
     }
 
-    auto [headers, data] = CSVProcessor::loadCSV(filepath);
-    tables[tableName] = std::make_unique<Table>(tableName, headers, data);
+    auto [headers, data, columnTypes] = CSVProcessor::loadCSV(filepath);
+    tables[tableName] = std::make_unique<Table>(tableName, headers, data, columnTypes);
 }
 
 Table &StorageManager::getTable(const std::string &tableName)
