@@ -11,7 +11,7 @@ public:
     explicit QueryExecutor(std::shared_ptr<StorageManager> storage);
 
     std::shared_ptr<Table> execute(const std::string &query);
-    std::shared_ptr<Table> execute(const hsql::SelectStatement *stmt);
+    std::shared_ptr<Table> execute(const hsql::SelectStatement *stmt, const std::string &query);
 
 private:
     std::shared_ptr<StorageManager> storage_;

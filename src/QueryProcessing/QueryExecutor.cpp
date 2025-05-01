@@ -29,13 +29,13 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
         throw SyntaxError("Only SELECT statements supported");
     }
 
-    return execute(static_cast<const hsql::SelectStatement *>(stmt));
+    return execute(static_cast<const hsql::SelectStatement *>(stmt), query);
 }
 
-std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt)
+std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt, const std::string &query)
 {
     validateSelectStatement(stmt);
-    return plan_builder_->build(stmt)->execute();
+    return plan_builder_->build(stmt, query)->execute();
 }
 
 // Update validateSelectStatement

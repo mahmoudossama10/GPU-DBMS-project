@@ -8,7 +8,7 @@
 #include <chrono>
 #include <iostream>
 // CUDA kernels
-const int GPUManager::BATCH_SIZE = 500;
+const int GPUManager::BATCH_SIZE = 5000;
 
 // Helper for string comparison on device
 __device__ int strcmp_device(const char* str1, const char* str2) {
@@ -458,6 +458,8 @@ std::vector<uint8_t> GPUManager::evaluateConditionOnBatch(
             int rowIdx = batchIndices[rightTableIdx][i];
             rightBatchData[i] = rightTable->getInteger(rightColName, rowIdx);
         }
+
+        
         
         // auto leftBatchData = leftTable->getData().at(leftColName);
         // auto rightBatchData = rightTable->getData().at(rightColName);

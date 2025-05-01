@@ -1,6 +1,12 @@
 #pragma once
 #include <memory>
 #include <hsql/SQLParser.h>
+#include <duckdb.hpp>
+#include <duckdb.h>
+#include <duckdb/optimizer/optimizer.hpp>
+#include <duckdb/execution/physical_plan_generator.hpp>
+#include <duckdb/planner/logical_operator.hpp>
+#include <duckdb/planner/operator/logical_get.hpp>
 #include "../DataHandling/Table.hpp"
 #include "../DataHandling/StorageManager.hpp"
 #include "GPU.hpp" // Include the GPU header
@@ -46,7 +52,10 @@ public:
     void setExecutionMode(ExecutionMode mode);
 
     // Main build method
-    std::unique_ptr<ExecutionPlan> build(const hsql::SelectStatement *stmt);
+    std::unique_ptr<ExecutionPlan> build(const hsql::SelectStatement *stmt, const std::string &query);
+
+    std::unique_ptr<ExecutionPlan> convertDuckDBPlanToExecutionPlan(
+        std::unique_ptr<duckdb::LogicalOperator> duckdb_plan);
 
 private:
     std::shared_ptr<StorageManager> storage_;

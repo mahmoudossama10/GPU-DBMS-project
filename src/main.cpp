@@ -1,4 +1,6 @@
 #include "./CLI/CommandLineInterface.hpp"
+#include <duckdb.hpp>
+
 #include <iostream>
 
 int main()

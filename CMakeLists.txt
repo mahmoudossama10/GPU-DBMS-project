@@ -6,6 +6,8 @@ set(CMAKE_CUDA_STANDARD 14)
 
 # Include headers
 include_directories(
+    ${PROJECT_SOURCE_DIR}/libs/duckdb/src/include
+    ${PROJECT_SOURCE_DIR}/libs/duckdb/build/release/src
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/sql-parser-main/src
 )
@@ -13,6 +15,7 @@ include_directories(
 # (If needed: Make sure find_library finds your local sqlparser.a, or set SQLPARSER_LIB manually)
 link_directories(
     ${PROJECT_SOURCE_DIR}/sql-parser-main/build
+    ${PROJECT_SOURCE_DIR}/libs/duckdb/build/release/src
 )
 
 # Gather sources
@@ -45,10 +48,14 @@ if (CUDAToolkit_FOUND AND TARGET CUDA::cudart)
     target_link_libraries(sql_processor
         CUDA::cudart
         sqlparser
+        duckdb
     )
 else()
     target_link_libraries(sql_processor
         cudart
         sqlparser
+        duckdb
     )
 endif()
+
+
