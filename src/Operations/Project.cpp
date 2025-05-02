@@ -10,6 +10,62 @@
 #include <cmath>     // for NaN
 #include <regex>
 
+namespace
+{
+
+    bool isSelectAll(std::vector<hsql::Expr *> *selectList)
+    {
+        if (!selectList || selectList->empty())
+        {
+            return false;
+        }
+
+        for (auto *expr : *selectList)
+        {
+            if (expr->type == hsql::kExprStar)
+            {
+                return true;
+            }
+        }
+
+        // Check for "SELECT table.*" case
+        for (auto *expr : *selectList)
+        {
+            if (expr->type == hsql::kExprColumnRef &&
+                expr->table != nullptr &&
+                expr->name != nullptr &&
+                strcmp(expr->name, "*") == 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool selectListNeedsProjection(std::vector<hsql::Expr *> &selectList)
+    {
+        // If * present, never project
+        for (auto *expr : selectList)
+            if (expr->type == hsql::kExprStar)
+                return false;
+
+        // If *table present, also never project
+        for (auto *expr : selectList)
+        {
+            if (expr->type == hsql::kExprColumnRef && expr->name && std::strcmp(expr->name, "*") == 0)
+                return false;
+        }
+
+        // If any non-aggregate expression, projection is required
+        for (auto *expr : selectList)
+            if (expr->type != hsql::kExprFunctionRef)
+                return true;
+
+        // All are aggregates: NO projection needed
+        return false;
+    }
+
+}
 ProjectPlan::ProjectPlan(std::unique_ptr<ExecutionPlan> input,
                          const std::vector<hsql::Expr *> &select_list)
     : input_(std::move(input)), select_list_(select_list) {}
@@ -17,7 +73,12 @@ ProjectPlan::ProjectPlan(std::unique_ptr<ExecutionPlan> input,
 std::shared_ptr<Table> ProjectPlan::execute()
 {
     auto input_table = input_->execute();
-    return processProjection(input_table);
+
+    if (!isSelectAll(&select_list_) && selectListNeedsProjection(select_list_))
+    {
+        return processProjection(input_table);
+    }
+    return input_table;
 }
 
 std::vector<std::string> ProjectPlan::getColumnNames() const

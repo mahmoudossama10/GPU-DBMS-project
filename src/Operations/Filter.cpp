@@ -8,6 +8,7 @@
 #include <regex>
 #include <hsql/util/sqlhelper.h>
 #include <iomanip> // Required for std::setw
+#include <hsql/util/sqlhelper.h>
 
 namespace
 {
@@ -63,6 +64,21 @@ namespace
 std::shared_ptr<Table> FilterPlan::execute()
 {
     auto table = input_->execute();
+
+    std::string sqlStatement = "SELECT * FROM dummy WHERE " + string_condition;
+
+    // Parse the SQL statement
+    hsql::SQLParserResult result;
+    hsql::SQLParser::parse(sqlStatement, &result);
+
+    const auto *stmt = result.getStatement(0);
+
+    auto selectStmt = static_cast<const hsql::SelectStatement *>(stmt);
+    // Need to convert DuckDB's filter expression to HSQL
+
+    const hsql::Expr *processed_where = const_cast<hsql::Expr *>(selectStmt->whereClause);
+
+    condition_ = processed_where;
     return Filter::apply(table, condition_);
 }
 
@@ -70,6 +86,7 @@ std::shared_ptr<Table> Filter::apply(
     std::shared_ptr<Table> table,
     const hsql::Expr *condition)
 {
+
     if (!condition)
     {
         throw SemanticError("Null condition in filter");
@@ -141,7 +158,6 @@ bool Filter::evaluateCondition(
 {
     if (!condition)
         return true;
-
     switch (condition->type)
     {
     case hsql::kExprOperator:
@@ -299,16 +315,6 @@ bool Filter::handleComparison(
             std::string lhsStr = unionToString(lhsValue, lhsType);
             std::string rhsStr = unionToString(rhsValue, rhsType);
 
-            // Clean up any dynamically allocated memory
-            if (lhsType == ColumnType::STRING)
-                delete lhsValue.s;
-            if (rhsType == ColumnType::STRING)
-                delete rhsValue.s;
-            if (lhsType == ColumnType::DATETIME)
-                delete lhsValue.t;
-            if (rhsType == ColumnType::DATETIME)
-                delete rhsValue.t;
-
             return expr->opType == hsql::kOpLike ? matchLikePattern(lhsStr, rhsStr) : !matchLikePattern(lhsStr, rhsStr);
         }
 
@@ -326,16 +332,6 @@ bool Filter::handleComparison(
             // Convert to string for mixed type comparisons
             std::string lhsStr = unionToString(lhsValue, lhsType);
             std::string rhsStr = unionToString(rhsValue, rhsType);
-
-            // Clean up any dynamically allocated memory
-            if (lhsType == ColumnType::STRING)
-                delete lhsValue.s;
-            if (rhsType == ColumnType::STRING)
-                delete rhsValue.s;
-            if (lhsType == ColumnType::DATETIME)
-                delete lhsValue.t;
-            if (rhsType == ColumnType::DATETIME)
-                delete rhsValue.t;
 
             return compareStrings(lhsStr, rhsStr, expr->opType);
         }
@@ -355,8 +351,6 @@ bool Filter::handleComparison(
         {
             result = compareStrings(*(lhsValue.s), *(rhsValue.s), expr->opType);
         }
-        delete lhsValue.s;
-        delete rhsValue.s;
     }
     break;
 
@@ -371,8 +365,6 @@ bool Filter::handleComparison(
     case ColumnType::DATETIME:
     {
         result = compareDateTimes(*(lhsValue.t), *(rhsValue.t), expr->opType);
-        delete lhsValue.t;
-        delete rhsValue.t;
     }
     break;
 

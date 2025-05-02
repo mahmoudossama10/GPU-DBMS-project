@@ -9,9 +9,36 @@
 #include <cstring>
 #include <hsql/util/sqlhelper.h>
 #include <algorithm>
+#include <regex>
 
 namespace
 {
+
+    std::string insertAndBetweenComparisons(const std::string &input)
+    {
+        std::regex comparison(R"((\w+\s*(=|!=|<|>|<=|>=)\s*('[^']*'|[0-9]+)))");
+        std::sregex_iterator iter(input.begin(), input.end(), comparison);
+        std::sregex_iterator end;
+
+        std::vector<std::string> comparisons;
+        while (iter != end)
+        {
+            comparisons.push_back(iter->str());
+            ++iter;
+        }
+
+        // Join with " AND "
+        std::string result;
+        for (size_t i = 0; i < comparisons.size(); i++)
+        {
+            result += comparisons[i];
+            if (i < comparisons.size() - 1)
+                result += " AND ";
+        }
+
+        return result;
+    }
+
     bool isInteger(const std::string &s)
     {
         char *end;
@@ -432,17 +459,17 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
 
     // Get query plan from DuckDB
     con.Query("CREATE TABLE employees AS SELECT * FROM read_csv_auto('./data/input/employees_new.csv');");
-    con.Query("CREATE TABLE departments AS SELECT * FROM read_csv_auto('./data/input/departments_new.csv');");
-    con.Query("CREATE TABLE projects AS SELECT * FROM read_csv_auto('./data/input/projects_new.csv');");
+    // con.Query("CREATE TABLE departments AS SELECT * FROM read_csv_auto('./data/input/departments_new.csv');");
+    // con.Query("CREATE TABLE projects AS SELECT * FROM read_csv_auto('./data/input/projects_new.csv');");
 
     auto duckdb_plan = con.ExtractPlan(query);
 
     // Convert DuckDB plan to our execution plan tree
-    return convertDuckDBPlanToExecutionPlan(std::move(duckdb_plan));
+    return convertDuckDBPlanToExecutionPlan(stmt, std::move(duckdb_plan));
 }
 
-std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(
-    std::unique_ptr<duckdb::LogicalOperator> duckdb_plan)
+std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(const hsql::SelectStatement *stmt,
+                                                                             std::unique_ptr<duckdb::LogicalOperator> duckdb_plan)
 {
     std::cout << duckdb_plan->ToString() << std::endl;
 
@@ -456,7 +483,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(
     std::vector<std::unique_ptr<ExecutionPlan>> children;
     for (auto &child : duckdb_plan->children)
     {
-        children.push_back(convertDuckDBPlanToExecutionPlan(std::move(child)));
+        children.push_back(convertDuckDBPlanToExecutionPlan(stmt, std::move(child)));
     }
 
     // Then create our node
@@ -467,32 +494,101 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(
     {
     case duckdb::LogicalOperatorType::LOGICAL_GET:
     {
-        auto *tablelol = dynamic_cast<duckdb::LogicalGet *>(duckdb_plan.get());
-        std::cout << tablelol->GetTable();
-        // std::string table_name = tablelol->; // Actual table name
-        // plan = std::make_unique<TableScanPlan>(storage_, scan->table->name, alias);
+        auto *table_scan = dynamic_cast<duckdb::LogicalGet *>(duckdb_plan.get());
+        auto params = table_scan->ParamsToString();
+        std::string table_name = "";
+        std::string alias = "";
+        std::string filters = "";
+
+        for (const auto &entry : params)
+        {
+            if (entry.first == "Table")
+            {
+                table_name = entry.second;
+            }
+            if (entry.first == "Filters")
+            {
+                filters = insertAndBetweenComparisons(entry.second);
+            }
+        }
+        auto table = stmt->fromTable;
+        if (!table)
+        {
+            throw SemanticError("Table reference is null");
+        }
+
+        switch (table->type)
+        {
+        case hsql::kTableName:
+        {
+            table_name = std::string(table->name);
+            alias = table->alias ? std::string(table->alias->name) : "";
+
+            break;
+        }
+        case hsql::kTableCrossProduct:
+        {
+
+            for (size_t i = 0; i < table->list->size(); i++)
+            {
+                std::string temp_table_name = std::string(table->list->at(i)->name);
+                if (table_name == temp_table_name)
+                {
+                    alias = table->list->at(i)->alias ? std::string(table->list->at(i)->alias->name) : "";
+                }
+            }
+            break;
+        }
+
+        default:
+            break;
+        }
+        std::cout << table_name << alias << '\n';
+        plan = std::make_unique<TableScanPlan>(storage_, table_name, alias);
+
+        if (filters != "")
+        {
+            plan = buildFilterPlan(std::move(plan), filters);
+        }
         break;
     }
-    // case duckdb::PhysicalOperatorType::FILTER:
-    // {
-    //     auto filter = static_cast<duckdb::PhysicalFilter *>(duckdb_plan.get());
-    //     // Need to convert DuckDB's filter expression to HSQL
-    //     hsql::Expr *where = convertDuckDBExprToHSQL(filter->expressions[0].get());
-    //     plan = std::make_unique<FilterPlan>(std::move(children[0]), where);
-    //     break;
-    // }
-    // case duckdb::PhysicalOperatorType::PROJECTION:
-    // {
-    //     auto proj = static_cast<duckdb::PhysicalProjection *>(duckdb_plan.get());
-    //     // Convert projection expressions
-    //     std::vector<hsql::Expr *> select_list;
-    //     for (auto &expr : proj->expressions)
-    //     {
-    //         select_list.push_back(convertDuckDBExprToHSQL(expr.get()));
-    //     }
-    //     plan = std::make_unique<ProjectPlan>(std::move(children[0]), select_list);
-    //     break;
-    // }
+    case duckdb::LogicalOperatorType::LOGICAL_FILTER:
+    {
+        auto *table_filter = dynamic_cast<duckdb::LogicalFilter *>(duckdb_plan.get());
+        auto params = table_filter->ParamsToString();
+        std::string filter_condition_string = "";
+        for (const auto &entry : params)
+        {
+            if (entry.first == "Expressions")
+            {
+                filter_condition_string = entry.second;
+            }
+        }
+
+        plan = buildFilterPlan(std::move(children[0]), filter_condition_string);
+        break;
+    }
+    case duckdb::LogicalOperatorType::LOGICAL_PROJECTION:
+    {
+        // auto *table_projection = dynamic_cast<duckdb::LogicalProjection *>(duckdb_plan.get());
+        // auto params = table_projection->ParamsToString();
+
+        // for (const auto &entry : params)
+        // {
+        //     std::cout << entry.first << ": " << entry.second << std::endl;
+        // }
+
+        plan = buildProjectPlan(std::move(children[0]), *(stmt->selectList));
+
+        // // Convert projection expressions
+        // std::vector<hsql::Expr *> select_list;
+        // for (auto &expr : proj->expressions)
+        // {
+        //     select_list.push_back(convertDuckDBExprToHSQL(expr.get()));
+        // }
+        // plan = std::make_unique<ProjectPlan>(std::move(children[0]), select_list);
+        break;
+    }
     // Add other operator types as needed
     default:
         throw SemanticError("Unsupported DuckDB operator type");
@@ -758,7 +854,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildFilterPlan(
     std::unique_ptr<ExecutionPlan> input,
-    const hsql::Expr *where)
+    const std::string where)
 {
     // WHERE clause should already be processed for subqueries by this point
     return std::make_unique<FilterPlan>(std::move(input), where);

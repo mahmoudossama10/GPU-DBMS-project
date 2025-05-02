@@ -14,6 +14,7 @@ CSVProcessor::CSVProcessor()
 }
 CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 {
+
     std::ifstream file(filepath);
     if (!file.is_open())
     {
@@ -144,7 +145,11 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         {
             throw std::runtime_error("CSV row has different column count than header");
         }
-
+        if (rowCount > 106)
+        {
+            int lol = 5;
+            int z = 5;
+        }
         // Add each field to its respective column with proper type conversion
         for (size_t i = 0; i < headers.size(); ++i)
         {

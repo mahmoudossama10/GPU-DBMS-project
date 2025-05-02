@@ -8,13 +8,14 @@ class FilterPlan : public ExecutionPlan
 {
 public:
     FilterPlan(std::unique_ptr<ExecutionPlan> input,
-               const hsql::Expr *condition)
-        : input_(std::move(input)), condition_(condition) {}
+               const std::string condition)
+        : input_(std::move(input)), string_condition(condition) {}
 
     std::shared_ptr<Table> execute() override;
 
 private:
     std::unique_ptr<ExecutionPlan> input_;
+    const std::string string_condition;
     const hsql::Expr *condition_;
 };
 

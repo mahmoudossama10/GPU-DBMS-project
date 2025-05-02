@@ -7,6 +7,11 @@
 #include <duckdb/execution/physical_plan_generator.hpp>
 #include <duckdb/planner/logical_operator.hpp>
 #include <duckdb/planner/operator/logical_get.hpp>
+#include <duckdb/planner/operator/logical_projection.hpp>
+#include <duckdb/planner/operator/logical_filter.hpp>
+#include <hsql/SQLParserResult.h>
+#include <hsql/sql/Expr.h>
+#include <hsql/util/sqlhelper.h>
 #include "../DataHandling/Table.hpp"
 #include "../DataHandling/StorageManager.hpp"
 #include "GPU.hpp" // Include the GPU header
@@ -54,8 +59,8 @@ public:
     // Main build method
     std::unique_ptr<ExecutionPlan> build(const hsql::SelectStatement *stmt, const std::string &query);
 
-    std::unique_ptr<ExecutionPlan> convertDuckDBPlanToExecutionPlan(
-        std::unique_ptr<duckdb::LogicalOperator> duckdb_plan);
+    std::unique_ptr<ExecutionPlan> convertDuckDBPlanToExecutionPlan(const hsql::SelectStatement *stmt,
+                                                                    std::unique_ptr<duckdb::LogicalOperator> duckdb_plan);
 
 private:
     std::shared_ptr<StorageManager> storage_;
@@ -73,7 +78,7 @@ private:
 
     // Filter plans
     std::unique_ptr<ExecutionPlan> buildFilterPlan(std::unique_ptr<ExecutionPlan> input,
-                                                   const hsql::Expr *where);
+                                                   const std::string where);
 
     // Extract tables from complex table references
     std::vector<std::pair<std::string, std::string>> extractTableReferences(const hsql::TableRef *table);
