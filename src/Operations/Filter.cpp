@@ -144,11 +144,14 @@ std::shared_ptr<Table> Filter::apply(
         }
     }
 
-    return std::make_shared<Table>(
+    auto result = std::make_shared<Table>(
         table->getName() + "_filtered",
         headers,
         filteredColumnData,
         columnTypes);
+
+    result->setAlias(table->getAlias());
+    return result;
 }
 
 bool Filter::evaluateCondition(

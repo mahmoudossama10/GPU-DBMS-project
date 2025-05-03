@@ -9,6 +9,15 @@
 #include <duckdb/planner/operator/logical_get.hpp>
 #include <duckdb/planner/operator/logical_projection.hpp>
 #include <duckdb/planner/operator/logical_filter.hpp>
+#include <duckdb/planner/operator/logical_comparison_join.hpp>
+#include <duckdb/planner/operator/logical_any_join.hpp>
+#include <duckdb/planner/operator/logical_cross_product.hpp>
+
+#include <duckdb/planner/expression/bound_reference_expression.hpp>
+
+#include <duckdb/planner/operator/logical_join.hpp>
+
+#include <duckdb/planner/joinside.hpp>
 #include <hsql/SQLParserResult.h>
 #include <hsql/sql/Expr.h>
 #include <hsql/util/sqlhelper.h>
@@ -34,9 +43,14 @@ public:
 class GPUJoinPlan : public ExecutionPlan
 {
 public:
-    GPUJoinPlan(std::vector<std::shared_ptr<Table>> tables,
-                std::vector<std::string> table_names,
-                const hsql::Expr *where_clause,
+    // GPUJoinPlan(std::vector<std::shared_ptr<Table>> tables,
+    //             std::vector<std::string> table_names,
+    //             const hsql::Expr *where_clause,
+    //             std::shared_ptr<GPUManager> gpu_manager);
+
+    GPUJoinPlan(std::unique_ptr<ExecutionPlan> leftTable,
+                std::unique_ptr<ExecutionPlan> rightTable,
+                std::string where,
                 std::shared_ptr<GPUManager> gpu_manager);
 
     std::shared_ptr<Table> execute() override;
@@ -45,6 +59,9 @@ private:
     std::vector<std::shared_ptr<Table>> tables_;
     std::vector<std::string> table_names_;
     const hsql::Expr *where_clause_;
+    std::unique_ptr<ExecutionPlan> leftTable_;
+    std::unique_ptr<ExecutionPlan> rightTable_;
+    std::string whereString;
     std::shared_ptr<GPUManager> gpu_manager_;
 };
 
@@ -60,7 +77,7 @@ public:
     std::unique_ptr<ExecutionPlan> build(const hsql::SelectStatement *stmt, const std::string &query);
 
     std::unique_ptr<ExecutionPlan> convertDuckDBPlanToExecutionPlan(const hsql::SelectStatement *stmt,
-                                                                    std::unique_ptr<duckdb::LogicalOperator> duckdb_plan);
+                                                                    std::unique_ptr<duckdb::LogicalOperator> duckdb_plan, int cnt);
 
 private:
     std::shared_ptr<StorageManager> storage_;
@@ -99,6 +116,10 @@ private:
         std::unique_ptr<ExecutionPlan> input,
         const std::vector<hsql::OrderDescription *> &order_exprs);
 
+    std::unique_ptr<ExecutionPlan> buildGPUJoinPlan(
+        std::unique_ptr<ExecutionPlan> leftTable,
+        std::unique_ptr<ExecutionPlan> rightTable,
+        std::string where);
     // Check if a table reference has a subquery
     bool hasSubqueryInTableRef(const hsql::TableRef *table);
 };

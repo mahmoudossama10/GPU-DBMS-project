@@ -83,6 +83,10 @@
         "complex": "cpp",
         "csignal": "cpp",
         "list": "cpp",
-        "__locale": "cpp"
+        "__locale": "cpp",
+        "__config": "cpp",
+        "ios": "cpp",
+        "locale": "cpp",
+        "__bit_reference": "cpp"
     }
 }

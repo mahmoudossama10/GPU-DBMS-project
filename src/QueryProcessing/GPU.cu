@@ -9,6 +9,271 @@
 #include <iostream>
 // CUDA kernels
 const int GPUManager::BATCH_SIZE = 5000;
+#define BLOCK_SIZE_KOGGE_STONE 1024
+int64_t *d_results_join;
+
+// =========== KOGGE-STONE ALGORITHM (WORK INEFFICIENT) ===========
+// __global__ void koggeStone(int64_t *d_data, int64_t *d_output, int64_t *partialSums, int n)
+// {
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+//     if (idx >= n)
+//         return;
+
+//     // using double buffering
+//     __shared__ int64_t buffer1_s[BLOCK_SIZE_KOGGE_STONE];
+//     __shared__ int64_t buffer2_s[BLOCK_SIZE_KOGGE_STONE];
+//     int64_t *inBuffer_s = buffer1_s;
+//     int64_t *outBuffer_s = buffer2_s;
+
+//     // Load data into shared memory
+//     inBuffer_s[threadIdx.x] = d_data[idx];
+//     __syncthreads();
+
+//     // do prefix sum on the block
+//     for (int stride = 1; stride <= BLOCK_SIZE_KOGGE_STONE / 2; stride *= 2)
+//     {
+//         if (threadIdx.x >= stride)
+//             outBuffer_s[threadIdx.x] = inBuffer_s[threadIdx.x] + inBuffer_s[threadIdx.x - stride];
+//         else
+//             outBuffer_s[threadIdx.x] = inBuffer_s[threadIdx.x];
+//         __syncthreads();
+//         int64_t *tempbuffer = inBuffer_s;
+//         inBuffer_s = outBuffer_s;
+//         outBuffer_s = tempbuffer;
+//     }
+
+//     // save to partial sums
+//     if (threadIdx.x == blockDim.x - 1)
+//     {
+//         partialSums[blockIdx.x] = inBuffer_s[threadIdx.x];
+//     }
+
+//     // save to output
+//     d_output[idx] = inBuffer_s[threadIdx.x];
+// }
+
+// __global__ void handlePartialSumKogge(int64_t *output, int64_t *partialSums, int n)
+// {
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+//     if (idx >= n)
+//         return;
+
+//     if (blockIdx.x > 0)
+//     {
+//         // add patial sum to the block
+//         output[idx] += partialSums[blockIdx.x - 1];
+//     }
+// }
+
+// void koggeStoneCPU(int64_t *d_data, int64_t *d_result, int n)
+// {
+//     int64_t *d_partialSums;
+//     int numBlocks = (n + BLOCK_SIZE_KOGGE_STONE - 1) / BLOCK_SIZE_KOGGE_STONE;
+//     cudaMalloc(&d_partialSums, numBlocks * sizeof(int64_t));
+
+//     koggeStone<<<numBlocks, BLOCK_SIZE_KOGGE_STONE>>>(d_data, d_result, d_partialSums, n);
+//     cudaDeviceSynchronize();
+
+//     if (numBlocks > 1)
+//     {
+//         koggeStoneCPU(d_partialSums, d_partialSums, numBlocks);
+//         handlePartialSumKogge<<<numBlocks, BLOCK_SIZE_KOGGE_STONE>>>(d_result, d_partialSums, n);
+//         cudaDeviceSynchronize();
+//     }
+//     cudaFree(d_partialSums);
+// }
+
+
+__global__ void efficient_prefix_sum(int64_t* input, int64_t* output, int n, int64_t* aux) {
+    extern __shared__ int64_t temp[];
+
+    int64_t idx = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+
+    int64_t t = threadIdx.x;
+
+    temp[t]              = 0;
+    temp[t + blockDim.x] = 0;
+
+    if (idx < n)              temp[t]              = input[idx];
+    if (idx + blockDim.x < n) temp[t + blockDim.x] = input[idx + blockDim.x];
+
+    int64_t factor = 1;
+    for (unsigned int stride = blockDim.x; stride > 0; stride /= 2) {
+        __syncthreads();
+        if (t < stride) {
+            const int64_t ai = factor * ( 2 * t + 1 ) - 1;
+            const int64_t bi = factor * ( 2 * t + 2 ) - 1;
+            temp[bi] += temp[ai];
+        }
+        factor <<= 1;
+    }
+
+    __syncthreads();
+
+    if (t == 0) {
+        temp[blockDim.x * 2 - 1] = 0;
+    }
+
+    factor = 1;
+    for (unsigned int stride = blockDim.x; stride > 0; stride /= 2) {
+        __syncthreads();
+
+        if (t < factor) {
+            const int64_t ai = stride * ( 2 * t + 1 ) - 1;
+            const int64_t bi = stride * ( 2 * t + 2 ) - 1;
+            const int64_t val = temp[ai];
+
+            temp[ai]  = temp[bi];
+            temp[bi] += val;
+        }
+
+        factor <<= 1;
+    }
+
+    __syncthreads();
+
+    if (t == 0 && aux != nullptr) aux[blockIdx.x] = temp[blockDim.x * 2 - 1] + input[blockIdx.x * blockDim.x * 2 + blockDim.x * 2 - 1];
+
+    __syncthreads();
+
+    if (idx < n)              output[idx]              = temp[t] + input[idx];
+    if (idx + blockDim.x < n) output[idx + blockDim.x] = temp[t + blockDim.x] + input[idx + blockDim.x];
+}
+
+__global__ void efficient_prefix_sum(char* input, int64_t* output, int n, int64_t* aux) {
+    extern __shared__ int64_t temp[];
+
+    int64_t idx = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+
+    int64_t t = threadIdx.x;
+
+    temp[t]              = 0;
+    temp[t + blockDim.x] = 0;
+
+    if (idx < n)              temp[t]              = input[idx];
+    if (idx + blockDim.x < n) temp[t + blockDim.x] = input[idx + blockDim.x];
+
+    int64_t factor = 1;
+    for (unsigned int stride = blockDim.x; stride > 0; stride /= 2) {
+        __syncthreads();
+        if (t < stride) {
+            const int64_t ai = factor * ( 2 * t + 1 ) - 1;
+            const int64_t bi = factor * ( 2 * t + 2 ) - 1;
+            temp[bi] += temp[ai];
+        }
+        factor <<= 1;
+    }
+
+    __syncthreads();
+
+    if (t == 0) {
+        temp[blockDim.x * 2 - 1] = 0;
+    }
+
+    factor = 1;
+    for (unsigned int stride = blockDim.x; stride > 0; stride /= 2) {
+        __syncthreads();
+
+        if (t < factor) {
+            const int64_t ai = stride * ( 2 * t + 1 ) - 1;
+            const int64_t bi = stride * ( 2 * t + 2 ) - 1;
+            const int64_t val = temp[ai];
+
+            temp[ai]  = temp[bi];
+            temp[bi] += val;
+        }
+
+        factor <<= 1;
+    }
+
+    __syncthreads();
+
+    if (t == 0 && aux != nullptr) aux[blockIdx.x] = temp[blockDim.x * 2 - 1] + input[blockIdx.x * blockDim.x * 2 + blockDim.x * 2 - 1];
+
+    __syncthreads();
+
+    if (idx < n)              output[idx]              = temp[t] + input[idx];
+    if (idx + blockDim.x < n) output[idx + blockDim.x] = temp[t + blockDim.x] + input[idx + blockDim.x];
+}
+
+__global__ void add_aux(int64_t* input, int n, const int64_t* aux) {
+    int64_t idx = (blockIdx.x + 1) * blockDim.x * 2 + threadIdx.x;
+
+    if   (idx >= n) return;
+    input[idx]              = aux[blockIdx.x] + input[idx];
+
+    if   (idx + blockDim.x >= n) return;
+    input[idx + blockDim.x] = aux[blockIdx.x] + input[idx + blockDim.x];
+}
+
+static void run_scan(int64_t* input, int64_t* output, int64_t n) {
+    if (n == 0) return;
+
+    int64_t blocks = (n + 256 * 2 - 1) / (256 * 2);
+
+    int64_t *d_block_sums;
+    cudaMalloc(&d_block_sums, blocks * sizeof(int64_t));
+
+    efficient_prefix_sum<<<blocks, 256, (256 * 2 + 1) * sizeof(int64_t)>>>(input, output, n, d_block_sums);
+    // CUDA_CHECK_LAST_ERROR("efficient_prefix_sum");
+
+    if (blocks > 256) {
+        int64_t* r_v;
+        cudaMalloc(&r_v, blocks * sizeof(int64_t));
+
+        run_scan(d_block_sums, r_v, blocks);
+        // CUDA_CHECK_LAST_ERROR("run_scan::recursive");
+        cudaFree(d_block_sums);
+        d_block_sums = r_v;
+    } else {
+        efficient_prefix_sum<<<1, 256, (256 * 2 + 1) * sizeof(int64_t)>>>(d_block_sums, d_block_sums, blocks, nullptr);
+        // CUDA_CHECK_LAST_ERROR("efficient_prefix_sum");
+    }
+
+    if (blocks > 1) {
+        // CUDA_CHECK_LAST_ERROR("add_aux before");
+        add_aux<<<blocks - 1, 256>>>(output, n, d_block_sums);
+        // CUDA_CHECK_LAST_ERROR("add_aux");
+    }
+
+    cudaFree(d_block_sums);
+}
+
+static void run_scan(char* input, int64_t* output, int64_t n) {
+    if (n == 0) return;
+
+    int64_t blocks = (n + 256 * 2 - 1) / (256 * 2);
+
+    int64_t* d_block_sums;
+    cudaMalloc(&d_block_sums, blocks * sizeof(int64_t));
+
+
+    efficient_prefix_sum<<<blocks, 256, (256 * 2) * sizeof(int64_t)>>>(input, output, n, d_block_sums);
+    // CUDA_CHECK_LAST_ERROR("efficient_prefix_sum");
+
+    if (blocks > 256) {
+        int64_t* r_v;
+
+        cudaMalloc(&r_v, blocks * sizeof(int64_t));
+
+        run_scan(d_block_sums, r_v, blocks);
+        // CUDA_CHECK_LAST_ERROR("run_scan::recursive");
+        cudaFree(d_block_sums);
+        d_block_sums = r_v;
+    } else {
+        efficient_prefix_sum<<<1, 256, (256 * 2) * sizeof(int64_t)>>>(d_block_sums, d_block_sums, blocks, nullptr);
+        // CUDA_CHECK_LAST_ERROR("efficient_prefix_sum");
+    }
+
+    if (blocks > 1) {
+
+        add_aux<<<blocks - 1, 256>>>(output, n, d_block_sums);
+        // CUDA_CHECK_LAST_ERROR("add_aux");
+    }
+
+    cudaFree(d_block_sums);
+}
 
 // Helper for string comparison on device
 __device__ int strcmp_device(const char* str1, const char* str2) {
@@ -28,7 +293,7 @@ __global__ void evaluateComparisonBatchOptimized(
     int leftTableIdx,
     int rightTableIdx,
     int opType,
-    uint8_t* __restrict__ results,
+    int64_t* __restrict__ results,
     int batchSize,
     int leftBatchSize,
     int rightBatchSize)
@@ -68,7 +333,7 @@ __global__ void evaluateComparisonBatchOptimized(
             int64_t rightValue = rightColumn[indices[rightTableIdx]];
             
             // Evaluate the comparison (branch-free implementation for less divergence)
-            uint8_t match;
+            int64_t match;
             
             switch (opType) {
                 case 0: // Equals
@@ -100,11 +365,11 @@ __global__ void evaluateComparisonBatchOptimized(
 }
 
 __global__ void combineResults(
-    const uint8_t* results1, 
-    const uint8_t* results2,
-    uint8_t* output, 
+    const int64_t* results1, 
+    const int64_t* results2,
+    int64_t* output, 
     int size, 
-    uint8_t isAnd) 
+    int64_t isAnd) 
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     
@@ -200,13 +465,13 @@ std::shared_ptr<Table> GPUManager::executeBatchedJoin(
     auto headers = combineMultipleHeaders(tables);
     
     // Initialize column data structure
-    for (size_t col = 0; col < headers.size(); col++) {
+    for (int64_t col = 0; col < headers.size(); col++) {
         columnData[headers[col]] = std::vector<unionV>(resultData.size());
     }
     
     // Populate column data
-    for (size_t row = 0; row < resultData.size(); row++) {
-        for (size_t col = 0; col < headers.size(); col++) {
+    for (int64_t row = 0; row < resultData.size(); row++) {
+        for (int64_t col = 0; col < headers.size(); col++) {
             columnData[headers[col]][row] = resultData[row][col];
         }
     }
@@ -310,7 +575,7 @@ std::cout << "Merging results time: " << mergeTime.count() << " ms" << std::endl
 }
 
 // Process a specific batch combination across all tables
-std::vector<uint8_t> GPUManager::processBatch(
+std::vector<int64_t> GPUManager::processBatch(
     const std::vector<std::shared_ptr<Table>>& tables,
     const std::vector<std::vector<int>>& batchIndices,
     const hsql::Expr* conditions) {
@@ -322,7 +587,7 @@ std::vector<uint8_t> GPUManager::processBatch(
     }
     
     // Initialize all results to 1 (true)
-    std::vector<uint8_t> results(batchSize, 1);
+    std::vector<int64_t> results(batchSize, 1);
     
     // Base case: no conditions
     if (!conditions) {
@@ -338,21 +603,21 @@ std::vector<uint8_t> GPUManager::processBatch(
             auto rightResults = processBatch(tables, batchIndices, conditions->expr2);
             
             // Combine results on GPU
-            uint8_t *d_leftResults, *d_rightResults, *d_output;
-            cudaMalloc(&d_leftResults, batchSize * sizeof(uint8_t));
-            cudaMalloc(&d_rightResults, batchSize * sizeof(uint8_t));
-            cudaMalloc(&d_output, batchSize * sizeof(uint8_t));
+            int64_t *d_leftResults, *d_rightResults, *d_output;
+            cudaMalloc(&d_leftResults, batchSize * sizeof(int64_t));
+            cudaMalloc(&d_rightResults, batchSize * sizeof(int64_t));
+            cudaMalloc(&d_output, batchSize * sizeof(int64_t));
             
-            cudaMemcpy(d_leftResults, leftResults.data(), batchSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
-            cudaMemcpy(d_rightResults, rightResults.data(), batchSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_leftResults, leftResults.data(), batchSize * sizeof(int64_t), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_rightResults, rightResults.data(), batchSize * sizeof(int64_t), cudaMemcpyHostToDevice);
             
             int blockSize = 256;
             int numBlocks = (batchSize + blockSize - 1) / blockSize;
             
-            uint8_t isAnd = conditions->opType == hsql::OperatorType::kOpAnd ? 1 : 0;
+            int64_t isAnd = conditions->opType == hsql::OperatorType::kOpAnd ? 1 : 0;
             combineResults<<<numBlocks, blockSize>>>(d_leftResults, d_rightResults, d_output, batchSize, isAnd);
             
-            cudaMemcpy(results.data(), d_output, batchSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+            cudaMemcpy(results.data(), d_output, batchSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
             
             cudaFree(d_leftResults);
             cudaFree(d_rightResults);
@@ -367,7 +632,7 @@ std::vector<uint8_t> GPUManager::processBatch(
 }
 
 // Improved version of evaluateConditionOnBatch for column-major data and integer columns
-std::vector<uint8_t> GPUManager::evaluateConditionOnBatch(
+std::vector<int64_t> GPUManager::evaluateConditionOnBatch(
     const std::vector<std::shared_ptr<Table>>& tables,
     const std::vector<std::vector<int>>& batchIndices,
     const hsql::Expr* condition) {
@@ -379,7 +644,7 @@ std::vector<uint8_t> GPUManager::evaluateConditionOnBatch(
     }
     
     // Default to all true
-    std::vector<uint8_t> results(batchSize, 1);
+    std::vector<int64_t> results(batchSize, 1);
     
     // Handle comparison operators
     if (condition->type == hsql::kExprOperator && 
@@ -470,15 +735,15 @@ std::vector<uint8_t> GPUManager::evaluateConditionOnBatch(
         
         // Allocate device memory
         int64_t *d_leftCol, *d_rightCol;
-        uint8_t *d_results;
+        int64_t *d_results;
         int* d_tableSizes;
         
         cudaMalloc(&d_leftCol, leftBatchSize * sizeof(int64_t));
         cudaMalloc(&d_rightCol, rightBatchSize * sizeof(int64_t));
-        cudaMalloc(&d_results, batchSize * sizeof(uint8_t));
+        cudaMalloc(&d_results, batchSize * sizeof(int64_t));
         
         // Initialize results to 1 (true)
-        cudaMemsetAsync(d_results, 1, batchSize * sizeof(uint8_t), stream);
+        cudaMemsetAsync(d_results, 1, batchSize * sizeof(int64_t), stream);
         
         // Create table indices information
         std::vector<int> tableSizes;
@@ -510,7 +775,7 @@ std::vector<uint8_t> GPUManager::evaluateConditionOnBatch(
             leftBatchSize, rightBatchSize);
         
         // Copy results back to host asynchronously
-        cudaMemcpyAsync(results.data(), d_results, batchSize * sizeof(uint8_t), cudaMemcpyDeviceToHost, stream);
+        cudaMemcpyAsync(results.data(), d_results, batchSize * sizeof(int64_t), cudaMemcpyDeviceToHost, stream);
         
         // Synchronize to ensure results are ready
         cudaStreamSynchronize(stream);
@@ -574,6 +839,554 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 }
 
 
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+
+// New kernel for direct two-table join evaluation
+
+__global__ void compareIntColumns(
+    const int64_t*  leftColumn,
+    const int64_t*  rightColumn,
+    int leftSize, 
+    int rightSize,
+    int64_t* results, 
+    int opType,
+    const int* tableSizes,  // Array containing sizes of all tables
+    int numTables,          // Total number of tables
+    int leftTableIdx,       // Index of left table in the tables array
+    int rightTableIdx)      // Index of right table in the tables array
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (i < leftSize && j < rightSize) {
+        int64_t match = 0;
+        
+        // Compare the values based on the operation type
+        switch (opType) {
+            case 0: // Equals
+                match = (leftColumn[i] == rightColumn[j]) ? 1 : 0;
+                break;
+            case 1: // Not Equals
+                match = (leftColumn[i] != rightColumn[j]) ? 1 : 0;
+                break;
+            case 2: // Less Than
+                match = (leftColumn[i] < rightColumn[j]) ? 1 : 0;
+                break;
+            case 3: // Greater Than
+                match = (leftColumn[i] > rightColumn[j]) ? 1 : 0;
+                break;
+            case 4: // Less Than or Equals
+                match = (leftColumn[i] <= rightColumn[j]) ? 1 : 0;
+                break;
+            case 5: // Greater Than or Equals
+                match = (leftColumn[i] >= rightColumn[j]) ? 1 : 0;
+                break;
+        }
+        
+        int flatIndex = i * tableSizes[1] + j;
+        results[flatIndex] = match;
+    }
+}
+
+
+__global__ void evaluateTwoTableJoin(
+    const int64_t* __restrict__ leftColumn,
+    const int64_t* __restrict__ rightColumn,
+    int leftTableSize,
+    int rightTableSize,
+    int opType,
+    int64_t* __restrict__ results)
+{
+    // Each thread processes multiple combinations for better efficiency
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int stride = blockDim.x * gridDim.x;
+    const int totalCombinations = leftTableSize * rightTableSize;
+    
+    // Process combinations in stride
+    for (int i = idx; i < totalCombinations; i += stride) {
+        // Calculate left and right indices from the flattened index
+        int leftIdx = i / rightTableSize;
+        int rightIdx = i % rightTableSize;
+        
+        // Get values to compare
+        int64_t leftValue = leftColumn[leftIdx];
+        int64_t rightValue = rightColumn[rightIdx];
+        
+        // Evaluate the comparison (branch-free implementation for less divergence)
+        int64_t match;
+        
+        switch (opType) {
+            case 0: // Equals
+                match = (leftValue == rightValue);
+                break;
+            case 1: // Not Equals
+                match = (leftValue != rightValue);
+                break;
+            case 2: // Less Than
+                match = (leftValue < rightValue);
+                break;
+            case 3: // Greater Than
+                match = (leftValue > rightValue);
+                break;
+            case 4: // Less Than or Equals
+                match = (leftValue <= rightValue);
+                break;
+            case 5: // Greater Than or Equals
+                match = (leftValue >= rightValue);
+                break;
+            default:
+                match = 0;
+        }
+        
+        // Store the result
+        results[i] = match;
+    }
+}
+
+
+// Apply block sums to get the final prefix sum
+__global__ void addBlockSums(int* output, int* blockSums, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n && blockIdx.x > 0) {
+        output[i] += blockSums[blockIdx.x - 1];
+    }
+}
+
+std::vector<int64_t> iterator(int64_t* cpu_out, int size ) {
+    std::vector<int64_t> result;
+
+    int64_t prev = 0;
+
+    for (int64_t i = 0;i < size;i++) {
+        auto val = cpu_out[i];
+        if (val == prev) {
+            auto low = i;
+            auto high = size;
+            while (low < high) {
+                auto mid = low + (high - low) / 2;
+                if (cpu_out[mid] == val) {
+                    low = mid + 1;
+                } else {
+                    high = mid;
+                }
+            }
+
+            i = low - 1;
+        } else {
+            result.push_back(i);
+            prev = val;
+        }
+    }
+
+    return result;
+}
+
+// Function to perform binary search on prefix sum array to find match positions
+__global__ void binarySearchMatches(
+    const int64_t*  prefixSum,
+    int*  leftIndices,
+    int*  rightIndices,
+    int totalSize,
+    int rightTableSize,
+    int matchCount)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < matchCount) {
+        // Binary search to find the position where prefixSum[pos] >= idx+1
+        // This gives us the position in the original results array
+        int low = 0;
+        int high = totalSize - 1;
+        int pos = -1;
+        
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (prefixSum[mid] >= idx + 1) {
+                pos = mid;
+                high = mid - 1; // Continue searching left for leftmost occurrence
+            } else {
+                low = mid + 1;
+            }
+        }
+        
+        if (pos != -1) {
+            // Calculate original row indices
+            leftIndices[idx] = pos / rightTableSize;
+            rightIndices[idx] = pos % rightTableSize;
+        }
+    }
+}
+
+
+// Method to evaluate join condition directly between two tables
+std::vector<int64_t> GPUManager::evaluateTwoTableJoinCondition(
+    const std::shared_ptr<Table>& leftTable,
+    const std::shared_ptr<Table>& rightTable,
+    hsql::Expr* condition)
+{
+    int leftSize = leftTable->getSize();
+    int rightSize = rightTable->getSize();
+    std::vector<int> tableSizes;
+    tableSizes.push_back(leftSize);
+    tableSizes.push_back(rightSize);
+    int totalCombinations = leftSize * rightSize;
+    
+    // Default to all true
+    std::vector<int64_t> results(totalCombinations, 1);
+    
+    // Handle AND/OR conditions
+    if (condition->type == hsql::kExprOperator && 
+        (condition->opType == hsql::OperatorType::kOpAnd || 
+         condition->opType == hsql::OperatorType::kOpOr)) {
+        
+        // Process left and right conditions separately
+        auto leftResults = evaluateTwoTableJoinCondition(leftTable, rightTable, condition->expr);
+        auto rightResults = evaluateTwoTableJoinCondition(leftTable, rightTable, condition->expr2);
+
+        // Combine results on GPU
+        int64_t *d_leftResults, *d_rightResults;
+        cudaMalloc(&d_leftResults, totalCombinations * sizeof(int64_t));
+        cudaMalloc(&d_rightResults, totalCombinations * sizeof(int64_t));
+        
+        cudaMemcpy(d_leftResults, leftResults.data(), totalCombinations * sizeof(int64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_rightResults, rightResults.data(), totalCombinations * sizeof(int64_t), cudaMemcpyHostToDevice);
+        
+        int blockSize = 256;
+        int numBlocks = (totalCombinations + blockSize - 1) / blockSize;
+        
+        int64_t isAnd = condition->opType == hsql::OperatorType::kOpAnd ? 1 : 0;
+        combineResults<<<numBlocks, blockSize>>>(d_leftResults, d_rightResults, d_results_join, totalCombinations, isAnd);
+        
+        cudaMemcpy(results.data(), d_results_join, totalCombinations * sizeof(int64_t), cudaMemcpyDeviceToHost);
+    
+
+        cudaFree(d_leftResults);
+        cudaFree(d_rightResults);
+        
+        return results;
+    }
+    
+    // Handle comparison operator between columns
+    hsql::printExpression(condition, 5);
+    if (condition->type == hsql::kExprOperator && 
+        condition->expr->type == hsql::kExprColumnRef && 
+        condition->expr2->type == hsql::kExprColumnRef) {
+        
+        // Extract column names
+        std::string leftColName = condition->expr->name;
+        std::string rightColName = condition->expr2->name;
+        
+        // Check if we need to prepend table names/aliases
+        std::string leftTableName = condition->expr->table ? condition->expr->table : "";
+        std::string rightTableName = condition->expr2->table ? condition->expr2->table : "";
+        
+        // Find column indices
+        int leftColIdx = findColumnIndex(*leftTable, leftColName.c_str(), leftTableName.c_str());
+        int rightColIdx = findColumnIndex(*rightTable, rightColName.c_str(), rightTableName.c_str());
+        
+        // If columns not found or aren't in the expected tables, try swapping
+        if (leftColIdx == -1 || rightColIdx == -1) {
+            leftColIdx = findColumnIndex(*leftTable, rightColName.c_str(), rightTableName.c_str());
+            rightColIdx = findColumnIndex(*rightTable, leftColName.c_str(), leftTableName.c_str());
+            
+            // If still not found, return all true
+            if (leftColIdx == -1 || rightColIdx == -1) {
+                return results;
+            }
+            
+            // Swap operator direction if columns were swapped
+            switch (condition->opType) {
+                case hsql::OperatorType::kOpLess: 
+                    condition->opType = hsql::OperatorType::kOpGreater; 
+                    break;
+                case hsql::OperatorType::kOpGreater: 
+                    condition->opType = hsql::OperatorType::kOpLess; 
+                    break;
+                case hsql::OperatorType::kOpLessEq: 
+                    condition->opType = hsql::OperatorType::kOpGreaterEq; 
+                    break;
+                case hsql::OperatorType::kOpGreaterEq: 
+                    condition->opType = hsql::OperatorType::kOpLessEq; 
+                    break;
+                default: 
+                    break; // No change for equals/not equals
+            }
+        }
+        
+        // Get actual column names from the tables
+        leftColName = leftTable->getHeaders()[leftColIdx];
+        rightColName = rightTable->getHeaders()[rightColIdx];
+        
+        // Verify column types are integers (current implementation only handles integers)
+        if (leftTable->getColumnType(leftColName) != ColumnType::INTEGER || 
+            rightTable->getColumnType(rightColName) != ColumnType::INTEGER) {
+            // Only implementing integer comparisons in this version
+            return results;
+        }
+        
+        // Get operator type
+        int opType;
+        switch (condition->opType) {
+            case hsql::OperatorType::kOpEquals: opType = 0; break;
+            case hsql::OperatorType::kOpNotEquals: opType = 1; break;
+            case hsql::OperatorType::kOpLess: opType = 2; break;
+            case hsql::OperatorType::kOpGreater: opType = 3; break;
+            case hsql::OperatorType::kOpLessEq: opType = 4; break;
+            case hsql::OperatorType::kOpGreaterEq: opType = 5; break;
+            default: throw std::runtime_error("Unsupported operator type");
+        }
+        
+      // Get integer column data directly (column-major format)
+        const auto& leftColumnData = leftTable->getData().at(leftColName);
+        const auto& rightColumnData = rightTable->getData().at(rightColName);
+
+
+        // Allocate GPU memory
+        int64_t *d_leftColumn, *d_rightColumn;
+        
+        int *d_tableSizes;  // Add this line
+
+        cudaMalloc(&d_leftColumn, leftSize * sizeof(int64_t));
+        cudaMalloc(&d_rightColumn, rightSize * sizeof(int64_t));
+        cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));  // Add this line
+
+        // Copy data to GPU
+        cudaMemcpy(d_leftColumn, leftColumnData.data(), leftSize * sizeof(int64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_rightColumn, rightColumnData.data(), rightSize * sizeof(int64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice);  // Add this line
+
+        // Calculate grid and block dimensions
+        int blockSize = 256;
+        int numBlocks = std::min(65535, (totalCombinations + blockSize - 1) / blockSize);
+
+        // Launch kernel with 2D grid/block configuration
+        dim3 blockDim(16, 16);
+        dim3 gridDim(
+            (leftSize + blockDim.x - 1) / blockDim.x,
+            (rightSize + blockDim.y - 1) / blockDim.y
+        );
+
+        compareIntColumns<<<gridDim, blockDim>>>(
+            d_leftColumn, d_rightColumn, 
+            leftSize, rightSize, 
+            d_results_join, opType, d_tableSizes, 2, 0, 1);  // Use d_tableSizes instead of tableSizes.data()
+        
+        // Copy results back to host
+        // cudaMemcpy(results.data(), d_results, totalCombinations * sizeof(int64_t), cudaMemcpyDeviceToHost);
+        cudaMemcpy(results.data(), d_results_join, results.size() * sizeof(int64_t), cudaMemcpyDeviceToHost);  // Add this line
+    
+        // Free GPU memory
+        cudaFree(d_leftColumn);
+        cudaFree(d_rightColumn);
+        // cudaFree(d_results);
+        cudaFree(d_tableSizes);  // Add this line
+    }
+    
+    return results;
+}
+
+
+
+
+
+// Modified two-table join method that uses binary search on prefix sum
+std::shared_ptr<Table> GPUManager::executeTwoTableJoinWithBinarySearch(
+    const std::shared_ptr<Table>& leftTable,
+    const std::shared_ptr<Table>& rightTable,
+    hsql::Expr* joinCondition)
+{
+    // if (!hasGPU_) {
+    //     throw std::runtime_error("GPU operations not available");
+    // }
+    
+    // Calculate total combinations (cross-product size)
+    int leftSize = leftTable->getSize();
+    int rightSize = rightTable->getSize();
+
+
+    int totalCombinations = leftSize * rightSize;
+    
+    // Default to all matches if no condition
+    std::vector<int64_t> results(totalCombinations, 1);
+    cudaMalloc(&d_results_join, totalCombinations * sizeof(int64_t));
+
+    // Process join condition if one exists
+    if (joinCondition) {
+        results = evaluateTwoTableJoinCondition(leftTable, rightTable, joinCondition);
+    }
+
+    // Device memory pointers
+    // int64_t* d_results;
+    int64_t* d_prefixSum;
+    int* d_blockSums;
+    
+    // Allocate device memory
+    // cudaMalloc(&d_results, totalCombinations * sizeof(int64_t));
+    cudaMalloc(&d_prefixSum, totalCombinations * sizeof(int64_t));
+    
+    // Copy results to device
+    // cudaMemcpy(d_results, results.data(), totalCombinations * sizeof(int64_t), cudaMemcpyHostToDevice);
+    
+    // Calculate grid and block dimensions
+    int blockSize = 512; // Power of 2 for efficient scan
+    int numBlocks = (totalCombinations + 2 * blockSize - 1) / (2 * blockSize); // Each thread processes 2 elements
+    
+    
+    int64_t *h_result = (int64_t *)malloc(totalCombinations * sizeof(int64_t));
+
+    int64_t *d_result;
+    cudaMalloc(&d_result, totalCombinations * sizeof(int64_t));
+
+
+    // koggeStoneCPU(d_results_join, d_result, totalCombinations);
+    run_scan(d_results_join, d_result, totalCombinations);
+
+    cudaMemcpy(h_result, d_result, totalCombinations * sizeof(int64_t), cudaMemcpyDeviceToHost);
+
+
+    std::vector<int64_t> match_indecies = iterator(h_result, totalCombinations);
+    // for (int i=0;i<1000;i++){
+    //     std::cout << h_result[i] << '\n';
+    // }
+
+
+    
+    // Get total match count (last element of prefix sum + last result)
+    // int lastPrefixSum = 0;
+    // int64_t lastResult = 0;
+    // cudaMemcpy(&lastPrefixSum, &d_result[totalCombinations-1], sizeof(int), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(&lastResult, &d_results_join[totalCombinations-1], sizeof(int64_t), cudaMemcpyDeviceToHost);
+    // int matchCount = lastPrefixSum + lastResult;
+    
+    // // Allocate memory for match indices
+    // int* d_leftIndices;
+    // int* d_rightIndices;
+    // cudaMalloc(&d_leftIndices, matchCount * sizeof(int));
+    // cudaMalloc(&d_rightIndices, matchCount * sizeof(int));
+    
+    // // Find match positions using binary search on prefix sum
+    // int bsBlockSize = 256;
+    // int bsNumBlocks = (matchCount + bsBlockSize - 1) / bsBlockSize;
+    
+    // binarySearchMatches<<<bsNumBlocks, bsBlockSize>>>(
+    //     d_result, d_leftIndices, d_rightIndices, 
+    //     totalCombinations, rightSize, matchCount);
+    
+    // // Copy indices back to host
+    // std::vector<int> leftIndices(matchCount);
+    // std::vector<int> rightIndices(matchCount);
+    // cudaMemcpy(leftIndices.data(), d_leftIndices, matchCount * sizeof(int), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(rightIndices.data(), d_rightIndices, matchCount * sizeof(int), cudaMemcpyDeviceToHost);
+    
+    // // Free GPU memory
+    // // cudaFree(d_results);
+    // cudaFree(d_prefixSum);
+    // cudaFree(d_blockSums);
+    // cudaFree(d_leftIndices);
+    // cudaFree(d_rightIndices);
+    
+    // Prepare and populate the result table (same as before)
+    // Combine headers from both tables
+    std::vector<std::string> headers;
+    std::unordered_map<std::string, ColumnType> columnTypes;
+    std::unordered_map<std::string, std::vector<unionV>> columnData;
+    
+    // Add left table headers
+    const auto& leftHeaders = leftTable->getHeaders();
+    const auto& leftTypes = leftTable->getColumnTypes();
+    const std::string& leftAlias = leftTable->getAlias();
+    
+    for (const auto& header : leftHeaders) {
+        std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
+        headers.push_back(qualifiedName);
+        columnTypes[qualifiedName] = leftTypes.at(header);
+    }
+    
+    // Add right table headers
+    const auto& rightHeaders = rightTable->getHeaders();
+    const auto& rightTypes = rightTable->getColumnTypes();
+    const std::string& rightAlias = rightTable->getAlias();
+    
+    for (const auto& header : rightHeaders) {
+        std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
+        headers.push_back(qualifiedName);
+        columnTypes[qualifiedName] = rightTypes.at(header);
+    }
+    
+    // Initialize column data structure with correct size
+    for (const auto& header : headers) {
+        columnData[header] = std::vector<unionV>(match_indecies.size());
+    }
+    
+    // Populate result table using the matching indices
+    for (int resultIdx = 0; resultIdx < match_indecies.size(); resultIdx++) {
+        int leftIdx = match_indecies[resultIdx] / rightSize;
+        int rightIdx = match_indecies[resultIdx] % rightSize;
+        
+        // Add data from left table
+        auto leftRow = leftTable->getRow(leftIdx);
+        auto rightRow = rightTable->getRow(rightIdx);
+        
+        // Add data from left table
+        for (int64_t colIdx = 0; colIdx < leftHeaders.size(); ++colIdx) {
+            const auto& header = leftHeaders[colIdx];
+            std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
+            columnData[qualifiedName][resultIdx] = leftRow[colIdx];
+        }
+        
+        // Add data from right table
+        for (int64_t colIdx = 0; colIdx < rightHeaders.size(); ++colIdx) {
+            const auto& header = rightHeaders[colIdx];
+            std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
+            columnData[qualifiedName][resultIdx] = rightRow[colIdx];
+        }
+    }
+    cudaFree(d_results_join);
+    // Create and return the joined table
+    return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+}
+
+
+
+
+
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+
 
 // // Updated kernel to handle full batch size
 // __global__ void evaluateComparisonBatch(
@@ -584,7 +1397,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     int leftTableIdx,
 //     int rightTableIdx,
 //     int opType,
-//     uint8_t* results,
+//     int64_t* results,
 //     int batchSize)
 // {
 //     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -606,7 +1419,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //         int rightValue = rightColumn[indices[rightTableIdx]];
         
 //         // Evaluate the comparison based on operation type
-//         uint8_t match = 0;
+//         int64_t match = 0;
 //         switch (opType) {
 //             case 0: // Equals
 //                 match = (leftValue == rightValue) ? 1 : 0;
@@ -642,14 +1455,14 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //      char** rightColumn,
 //     int leftSize, 
 //     int rightSize,
-//     uint8_t* results, 
+//     int64_t* results, 
 //     int opType) 
 // {
 //     int i = blockIdx.x * blockDim.x + threadIdx.x;
 //     int j = blockIdx.y * blockDim.y + threadIdx.y;
     
 //     if (i < leftSize && j < rightSize) {
-//         uint8_t match = 0;
+//         int64_t match = 0;
         
 //         switch (opType) {
 //             case 0: // Equals
@@ -683,13 +1496,13 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     char** rightColumn,
 //    int leftSize, 
 //    int rightSize,
-//    uint8_t* results, 
+//    int64_t* results, 
 //    int opType) 
 // {
 //    int i = blockIdx.x * blockDim.x + threadIdx.x;
    
 //    if (i < leftSize) {
-//        uint8_t match = 0;
+//        int64_t match = 0;
        
 //        switch (opType) {
 //            case 0: // Equals
@@ -721,7 +1534,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     const int* rightColumn,
 //     int leftSize, 
 //     int rightSize,
-//     uint8_t* results, 
+//     int64_t* results, 
 //     int opType,
 //     const int* tableSizes,  // Array containing sizes of all tables
 //     int numTables,          // Total number of tables
@@ -732,7 +1545,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     int j = blockIdx.y * blockDim.y + threadIdx.y;
     
 //     if (i < leftSize && j < rightSize) {
-//         uint8_t match = 0;
+//         int64_t match = 0;
         
 //         // Compare the values based on the operation type
 //         switch (opType) {
@@ -789,13 +1602,13 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     int* rightColumn,
 //    int leftSize, 
 //    int rightSize,
-//    uint8_t* results, 
+//    int64_t* results, 
 //    int opType) 
 // {
 //    int i = blockIdx.x * blockDim.x + threadIdx.x;
    
 //    if (i < leftSize) {
-//        uint8_t match = 0;
+//        int64_t match = 0;
        
 //        switch (opType) {
 //            case 0: // Equals
@@ -826,13 +1639,13 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //      int* column, 
 //     int constant,
 //     int size, 
-//     uint8_t* results, 
+//     int64_t* results, 
 //     int opType) 
 // {
 //     int i = blockIdx.x * blockDim.x + threadIdx.x;
     
 //     if (i < size) {
-//         uint8_t match = 0;
+//         int64_t match = 0;
         
 //         switch (opType) {
 //             case 0: // Equals
@@ -864,7 +1677,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     const int* stringOffsets,
 //     const char* constant,
 //     int size,
-//     uint8_t* results,
+//     int64_t* results,
 //     int opType)
 // {
 //     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -882,7 +1695,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
         
 //         comparison = (unsigned char)*currentString - (unsigned char)*constant;
         
-//         uint8_t match = 0;
+//         int64_t match = 0;
 //         switch (opType) {
 //             case 0: // Equals
 //                 match = (comparison == 0) ? 1 : 0;
@@ -911,7 +1724,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 
 
 
-// std::vector<uint8_t> GPUManager::gpuJoinTables(
+// std::vector<int64_t> GPUManager::gpuJoinTables(
 //     const Table& leftTable, 
 //     const Table& rightTable,
 //     const hsql::Expr* conditions) 
@@ -924,7 +1737,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     int rightSize = rightTable.getSize();
 //     int resultSize = leftSize * rightSize;
     
-//     std::vector<uint8_t> resultVector(resultSize, 0);
+//     std::vector<int64_t> resultVector(resultSize, 0);
     
 //     // Process each condition and combine results
 //     if (conditions->type == hsql::kExprOperator) {
@@ -934,25 +1747,25 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //             auto rightResults = processBinaryExpr(leftTable, rightTable, conditions->expr2);
             
 //             // Create device vectors
-//             uint8_t *d_leftResults, *d_rightResults, *d_output;
-//             cudaMalloc(&d_leftResults, resultSize * sizeof(uint8_t));
-//             cudaMalloc(&d_rightResults, resultSize * sizeof(uint8_t));
-//             cudaMalloc(&d_output, resultSize * sizeof(uint8_t));
+//             int64_t *d_leftResults, *d_rightResults, *d_output;
+//             cudaMalloc(&d_leftResults, resultSize * sizeof(int64_t));
+//             cudaMalloc(&d_rightResults, resultSize * sizeof(int64_t));
+//             cudaMalloc(&d_output, resultSize * sizeof(int64_t));
             
 //             // Copy data to device
-//             cudaMemcpy(d_leftResults, leftResults.data(), resultSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
-//             cudaMemcpy(d_rightResults, rightResults.data(), resultSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
+//             cudaMemcpy(d_leftResults, leftResults.data(), resultSize * sizeof(int64_t), cudaMemcpyHostToDevice);
+//             cudaMemcpy(d_rightResults, rightResults.data(), resultSize * sizeof(int64_t), cudaMemcpyHostToDevice);
             
 //             // Set up kernel execution parameters
 //             int blockSize = 256;
 //             int numBlocks = (resultSize + blockSize - 1) / blockSize;
             
 //             // Execute kernel
-//             uint8_t isAnd = conditions->opType == hsql::OperatorType::kOpAnd ? 1 : 0;
+//             int64_t isAnd = conditions->opType == hsql::OperatorType::kOpAnd ? 1 : 0;
 //             combineResults<<<numBlocks, blockSize>>>(d_leftResults, d_rightResults, d_output, resultSize, isAnd);
             
 //             // Copy results back to host
-//             cudaMemcpy(resultVector.data(), d_output, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+//             cudaMemcpy(resultVector.data(), d_output, resultSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
             
 //             // Free device memory
 //             cudaFree(d_leftResults);
@@ -986,7 +1799,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 // }
 
 // std::shared_ptr<Table> GPUManager::applyFilter(const Table& table, 
-//                                              const std::vector<uint8_t>& mask) 
+//                                              const std::vector<int64_t>& mask) 
 // {
 //     return std::make_shared<Table>(
 //         table.getName() + "_filtered",
@@ -997,7 +1810,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 
 // std::vector<std::vector<std::string>> GPUManager::mergeFilterResults(
 //     const Table& table,
-//     const std::vector<uint8_t>& mask) const 
+//     const std::vector<int64_t>& mask) const 
 // {
 //     std::vector<std::vector<std::string>> result;
     
@@ -1032,7 +1845,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 // std::vector<std::vector<std::string>> GPUManager::mergeJoinResults(
 //     const Table& left,
 //     const Table& right,
-//     const std::vector<uint8_t>& mask) const {
+//     const std::vector<int64_t>& mask) const {
     
 //     std::vector<std::vector<std::string>> result;
 //     const int rightSize = right.getSize();
@@ -1057,7 +1870,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     return result;
 // }
 
-// std::vector<uint8_t> GPUManager::gpuFilterTable(
+// std::vector<int64_t> GPUManager::gpuFilterTable(
 //     const Table& table,
 //     const hsql::Expr* conditions) 
 // {
@@ -1067,7 +1880,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 
     
 //     int tableSize = table.getSize();
-//     std::vector<uint8_t> resultVector(tableSize, 0);
+//     std::vector<int64_t> resultVector(tableSize, 0);
     
 //     // Process the conditions (simplified for the example)
 //     if (conditions->type == hsql::kExprOperator) {
@@ -1083,9 +1896,9 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //                 throw std::runtime_error("Column not found: " + std::string(columnName));
 //             }
             
-//             uint8_t* d_results;
-//             cudaMalloc(&d_results, tableSize * sizeof(uint8_t));
-//             cudaMemset(d_results, 0, tableSize * sizeof(uint8_t));
+//             int64_t* d_results;
+//             cudaMalloc(&d_results, tableSize * sizeof(int64_t));
+//             cudaMemset(d_results, 0, tableSize * sizeof(int64_t));
             
 //             int blockSize = 256;
 //             int numBlocks = (tableSize + blockSize - 1) / blockSize;
@@ -1178,7 +1991,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //             }
             
 //             // Copy results back
-//             cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+//             cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
 //             cudaFree(d_results);
 //         }
 
@@ -1238,11 +2051,11 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
                   
 //                   // Allocate device memory
 //                   int *d_leftCol, *d_rightCol;
-//                   uint8_t *d_results;
+//                   int64_t *d_results;
                   
 //                   cudaMalloc(&d_leftCol, tableSize * sizeof(int));
 //                   cudaMalloc(&d_rightCol, tableSize * sizeof(int));
-//                   cudaMalloc(&d_results, tableSize * sizeof(uint8_t));
+//                   cudaMalloc(&d_results, tableSize * sizeof(int64_t));
                   
 //                   // Copy data to device
 //                   cudaMemcpy(d_leftCol, leftColData.data(), tableSize * sizeof(int), cudaMemcpyHostToDevice);
@@ -1265,7 +2078,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //                       cudaEventDestroy(stop);
                       
 //                   // Copy results back to host
-//                   cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+//                   cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
                   
 //                   // Free device memory
 //                   cudaFree(d_leftCol);
@@ -1304,11 +2117,11 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
                   
 //                   // Copy arrays of pointers to device
 //                   char** d_leftStrings, **d_rightStrings;
-//                   uint8_t* d_results;
+//                   int64_t* d_results;
                   
 //                   cudaMalloc(&d_leftStrings, tableSize * sizeof(char*));
 //                   cudaMalloc(&d_rightStrings, tableSize * sizeof(char*));
-//                   cudaMalloc(&d_results, tableSize * sizeof(uint8_t));
+//                   cudaMalloc(&d_results, tableSize * sizeof(int64_t));
                   
 //                   cudaMemcpy(d_leftStrings, h_leftStrings, tableSize * sizeof(char*), cudaMemcpyHostToDevice);
 //                   cudaMemcpy(d_rightStrings, h_rightStrings, tableSize * sizeof(char*), cudaMemcpyHostToDevice);
@@ -1332,7 +2145,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //                   cudaEventDestroy(start);
 //                   cudaEventDestroy(stop);
 //                   // Copy results back to host
-//                   cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+//                   cudaMemcpy(resultVector.data(), d_results, tableSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
                   
 //                   // Free device memory
 //                   for (int i = 0; i < tableSize; i++) {
@@ -1363,7 +2176,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 
 
 // // Main function with both string and integer handling
-// std::vector<uint8_t> GPUManager::processComparisonExpr(
+// std::vector<int64_t> GPUManager::processComparisonExpr(
 //     const Table& leftTable, 
 //     const Table& rightTable,
 //     const hsql::Expr* expr) 
@@ -1376,7 +2189,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     int rightSize = rightTable.getSize();
 //     int resultSize = leftSize * rightSize;
     
-//     std::vector<uint8_t> resultVector(resultSize, 0);
+//     std::vector<int64_t> resultVector(resultSize, 0);
     
 //     // Column-column comparison
 //     if (expr->expr->type == hsql::kExprColumnRef && expr->expr2->type == hsql::kExprColumnRef) {
@@ -1388,7 +2201,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
         
 //         if (leftColIndex == -1 || rightColIndex == -1) {
 //             // throw std::runtime_error("Column not found in comparison");
-//             return  std::vector<uint8_t> (resultSize, 1);
+//             return  std::vector<int64_t> (resultSize, 1);
 //         }
         
 //         // Determine the operator type
@@ -1437,11 +2250,11 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
             
 //             // Allocate device memory
 //             int *d_leftCol, *d_rightCol;
-//             uint8_t *d_results;
+//             int64_t *d_results;
             
 //             cudaMalloc(&d_leftCol, leftSize * sizeof(int));
 //             cudaMalloc(&d_rightCol, rightSize * sizeof(int));
-//             cudaMalloc(&d_results, resultSize * sizeof(uint8_t));
+//             cudaMalloc(&d_results, resultSize * sizeof(int64_t));
             
 //             // Copy data to device
 //             cudaMemcpy(d_leftCol, leftColData.data(), leftSize * sizeof(int), cudaMemcpyHostToDevice);
@@ -1464,7 +2277,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //                 cudaEventDestroy(stop);
                 
 //             // Copy results back to host
-//             cudaMemcpy(resultVector.data(), d_results, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+//             cudaMemcpy(resultVector.data(), d_results, resultSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
             
 //             // Free device memory
 //             cudaFree(d_leftCol);
@@ -1503,11 +2316,11 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
             
 //             // Copy arrays of pointers to device
 //             char** d_leftStrings, **d_rightStrings;
-//             uint8_t* d_results;
+//             int64_t* d_results;
             
 //             cudaMalloc(&d_leftStrings, leftSize * sizeof(char*));
 //             cudaMalloc(&d_rightStrings, rightSize * sizeof(char*));
-//             cudaMalloc(&d_results, resultSize * sizeof(uint8_t));
+//             cudaMalloc(&d_results, resultSize * sizeof(int64_t));
             
 //             cudaMemcpy(d_leftStrings, h_leftStrings, leftSize * sizeof(char*), cudaMemcpyHostToDevice);
 //             cudaMemcpy(d_rightStrings, h_rightStrings, rightSize * sizeof(char*), cudaMemcpyHostToDevice);
@@ -1531,7 +2344,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //             cudaEventDestroy(start);
 //             cudaEventDestroy(stop);
 //             // Copy results back to host
-//             cudaMemcpy(resultVector.data(), d_results, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+//             cudaMemcpy(resultVector.data(), d_results, resultSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
             
 //             // Free device memory
 //             for (int i = 0; i < leftSize; i++) {
@@ -1554,7 +2367,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //     return resultVector;
 // }
 
-// std::vector<uint8_t> GPUManager::processBinaryExpr(
+// std::vector<int64_t> GPUManager::processBinaryExpr(
 //     const Table& leftTable, 
 //     const Table& rightTable,
 //     const hsql::Expr* expr) 
@@ -1569,26 +2382,26 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //               int resultSize = leftTable.getSize() * rightTable.getSize();
               
 //               // Create device vectors
-//               uint8_t *d_leftResults, *d_rightResults, *d_output;
-//               cudaMalloc(&d_leftResults, resultSize * sizeof(uint8_t));
-//               cudaMalloc(&d_rightResults, resultSize * sizeof(uint8_t));
-//               cudaMalloc(&d_output, resultSize * sizeof(uint8_t));
+//               int64_t *d_leftResults, *d_rightResults, *d_output;
+//               cudaMalloc(&d_leftResults, resultSize * sizeof(int64_t));
+//               cudaMalloc(&d_rightResults, resultSize * sizeof(int64_t));
+//               cudaMalloc(&d_output, resultSize * sizeof(int64_t));
               
 //               // Copy data to device
-//               cudaMemcpy(d_leftResults, leftResults.data(), resultSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
-//               cudaMemcpy(d_rightResults, rightResults.data(), resultSize * sizeof(uint8_t), cudaMemcpyHostToDevice);
+//               cudaMemcpy(d_leftResults, leftResults.data(), resultSize * sizeof(int64_t), cudaMemcpyHostToDevice);
+//               cudaMemcpy(d_rightResults, rightResults.data(), resultSize * sizeof(int64_t), cudaMemcpyHostToDevice);
               
 //               // Set up kernel execution parameters
 //               int blockSize = 256;
 //               int numBlocks = (resultSize + blockSize - 1) / blockSize;
               
 //               // Execute kernel
-//               uint8_t isAnd = expr->opType == hsql::OperatorType::kOpAnd ? 1 : 0;
+//               int64_t isAnd = expr->opType == hsql::OperatorType::kOpAnd ? 1 : 0;
 //               combineResults<<<numBlocks, blockSize>>>(d_leftResults, d_rightResults, d_output, resultSize, isAnd);
               
 //               // Copy results back to host
-//               std::vector<uint8_t> resultVector(resultSize);
-//               cudaMemcpy(resultVector.data(), d_output, resultSize * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+//               std::vector<int64_t> resultVector(resultSize);
+//               cudaMemcpy(resultVector.data(), d_output, resultSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
               
 //               // Free device memory
 //               cudaFree(d_leftResults);
@@ -1603,7 +2416,7 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
     
 //     // Default case - no conditions
 //     int resultSize = leftTable.getSize() * rightTable.getSize();
-//     return std::vector<uint8_t>(resultSize, 1);  // 1 means true
+//     return std::vector<int64_t>(resultSize, 1);  // 1 means true
 // }
 
 
