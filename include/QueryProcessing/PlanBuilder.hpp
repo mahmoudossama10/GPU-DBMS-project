@@ -85,6 +85,10 @@ private:
         std::unique_ptr<ExecutionPlan> input,
         const std::vector<hsql::OrderDescription *> &order_exprs);
 
+    std::unique_ptr<ExecutionPlan> buildGPUOrderByPlan(
+        std::unique_ptr<ExecutionPlan> input,
+        const std::vector<hsql::OrderDescription *> &order_exprs);
+
     // Check if a table reference has a subquery
     bool hasSubqueryInTableRef(const hsql::TableRef *table);
 };

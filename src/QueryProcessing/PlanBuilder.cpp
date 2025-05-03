@@ -3,6 +3,7 @@
 #include "../../include/Operations/Project.hpp"
 #include "../../include/Operations/Aggregator.hpp"
 #include "../../include/Operations/OrderBy.hpp"
+#include "../../include/Operations/GPUOrderBy.cuh"
 #include "../../include/Operations/Join.hpp"
 #include "Utilities/ErrorHandling.hpp"
 #include <iostream>
@@ -362,10 +363,10 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
                 plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
             }
 
-            // if (stmt->order && !stmt->order->empty())
-            // {
-            //     plan = buildOrderByPlan(std::move(plan), *stmt->order);
-            // }
+            if (stmt->order && !stmt->order->empty())
+            {
+                plan = buildGPUOrderByPlan(std::move(plan), *(stmt->order));
+            }
 
             return plan;
         }
@@ -415,6 +416,12 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
         // {
         //     plan = buildOrderByPlan(std::move(plan), *stmt->order);
         // }
+
+        if (stmt->order && !stmt->order->empty())
+        {
+            plan = buildOrderByPlan(std::move(plan), *(stmt->order));
+        }
+
         return plan;
     }
 }
@@ -576,13 +583,6 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildProjectPlan(
 //     return std::make_unique<AggregatorPlan>(std::move(input), select_list);
 // }
 
-// std::unique_ptr<ExecutionPlan> PlanBuilder::buildOrderByPlan(
-//     std::unique_ptr<ExecutionPlan> input,
-//     const std::vector<hsql::OrderDescription *> &order_exprs)
-// {
-//     return std::make_unique<OrderByPlan>(std::move(input), order_exprs);
-// }
-
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
 {
     if (!table)
@@ -680,6 +680,20 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildFilterPlan(
 {
     // WHERE clause should already be processed for subqueries by this point
     return std::make_unique<FilterPlan>(std::move(input), where);
+}
+
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildOrderByPlan(
+    std::unique_ptr<ExecutionPlan> input,
+    const std::vector<hsql::OrderDescription *> &order_exprs)
+{
+    return std::make_unique<OrderByPlan>(std::move(input), order_exprs);
+}
+
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUOrderByPlan(
+    std::unique_ptr<ExecutionPlan> input,
+    const std::vector<hsql::OrderDescription *> &order_exprs)
+{
+    return std::make_unique<GPUOrderByPlan>(std::move(input), order_exprs);
 }
 
 // Process WHERE clauses that contain subqueries
