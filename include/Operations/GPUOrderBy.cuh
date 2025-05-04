@@ -9,6 +9,7 @@
 // #include <unordered_map>
 // #include <algorithm>
 // #include <iostream>
+// #include <hsql/SQLParser.h>
 
 // // CUDA error checking macro
 // #define CUDA_CHECK(call)                                                  \
@@ -34,15 +35,15 @@
 //                                   int primary_sort_column_index);
 
 // __device__ bool compareRowIndices(const RowIndexValue &a, const RowIndexValue &b,
-//                                  const GPUSortColumn *sort_columns, int num_sort_cols, size_t num_cols, size_t original_num_rows,
-//                                  const int *int_data, const double *double_data,
-//                                  const char *string_data, size_t *string_offsets);
+//                                   const GPUSortColumn *sort_columns, int num_sort_cols, size_t num_cols, size_t original_num_rows,
+//                                   const int *int_data, const double *double_data,
+//                                   const char *string_data, size_t *string_offsets);
 
 // __global__ void bitonicSortStep(RowIndexValue *row_indices, size_t n,
-//                                unsigned int j, unsigned int k,
-//                                const GPUSortColumn *sort_columns, int num_sort_cols, size_t num_cols, size_t original_num_rows,
-//                                const int *int_data, const double *double_data,
-//                                const char *string_data, size_t *string_offsets);
+//                                 unsigned int j, unsigned int k,
+//                                 const GPUSortColumn *sort_columns, int num_sort_cols, size_t num_cols, size_t original_num_rows,
+//                                 const int *int_data, const double *double_data,
+//                                 const char *string_data, size_t *string_offsets);
 
 // class GPUOrderByPlan : public ExecutionPlan
 // {

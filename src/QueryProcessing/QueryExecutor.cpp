@@ -3,6 +3,7 @@
 #include "Utilities/ErrorHandling.hpp"
 #include "Utilities/UnionUtils.hpp"
 
+
 #include <iostream>
 #include <hsql/util/sqlhelper.h>
 #include <regex>
@@ -349,6 +350,11 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     call order by
 
     */
+
+    if (stmt->order && !stmt->order->empty())
+    {
+        result = plan_builder_->buildOrderByPlan(result, *stmt->order);
+    }
 
     if (!plan_builder_->isSelectAll(stmt->selectList) && plan_builder_->selectListNeedsProjection(*(stmt->selectList)))
     {

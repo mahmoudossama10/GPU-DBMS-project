@@ -24,7 +24,6 @@
 #include "../DataHandling/Table.hpp"
 #include "../DataHandling/StorageManager.hpp"
 #include "GPU.hpp" // Include the GPU header
-
 // Flag to control GPU acceleration
 enum class ExecutionMode
 {
@@ -110,6 +109,10 @@ public:
     std::shared_ptr<Table> buildProjectPlan(
         std::shared_ptr<Table> input,
         const std::vector<hsql::Expr *> &select_list);
+
+    std::shared_ptr<Table> buildGPUOrderByPlan(
+        std::shared_ptr<Table> input,
+        const std::vector<hsql::OrderDescription *> &order_exprs);
 
 private:
     std::shared_ptr<StorageManager> storage_;

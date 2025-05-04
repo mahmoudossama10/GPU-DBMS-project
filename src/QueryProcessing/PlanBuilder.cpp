@@ -763,7 +763,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
 std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(const hsql::SelectStatement *stmt,
                                                                              std::unique_ptr<duckdb::LogicalOperator> duckdb_plan, int cnt)
 {
-    // std::cout << duckdb_plan->ToString() << std::endl;
+    std::cout << duckdb_plan->ToString() << std::endl;
 
     // Base case for recursion
     if (!duckdb_plan)
@@ -980,6 +980,12 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
         break;
     }
+    case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
+    {
+        plan = buildPassPlane(std::move(children[0]));
+
+        break;
+    }
     // Add other operator types as needed
     default:
         throw SemanticError("Unsupported DuckDB operator type");
@@ -1150,6 +1156,15 @@ std::shared_ptr<Table> PlanBuilder::buildOrderByPlan(
     auto result = plan->execute();
     return result;
 }
+
+// std::shared_ptr<Table> PlanBuilder::buildGPUOrderByPlan(
+//     std::shared_ptr<Table> input,
+//     const std::vector<hsql::OrderDescription *> &order_exprs)
+// {
+//     auto plan = std::make_unique<GPUOrderByPlan>(input, order_exprs);
+//     auto result = plan->execute();
+//     return result;
+// }
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
 {
