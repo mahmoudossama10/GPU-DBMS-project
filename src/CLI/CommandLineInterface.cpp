@@ -72,6 +72,15 @@ void CommandLineInterface::cleanupBatchTables()
         }
     }
 
+    for (const auto &tableName : allTableNames)
+    {
+        if (tableName.find("sub_query") != std::string::npos)
+        {
+            std::string originalName = tableName.substr(0, tableName.find("_large"));
+            largeToOriginalMap[tableName] = originalName;
+        }
+    }
+
     // Second pass: remove all batch tables
     for (const auto &tableName : allTableNames)
     {

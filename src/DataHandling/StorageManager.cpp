@@ -28,6 +28,31 @@ bool StorageManager::tableExists(const std::string &tableName) const
     return tables.find(tableName) != tables.end();
 }
 
+// Add this implementation to the StorageManager.cpp file:
+void StorageManager::addTable(const std::shared_ptr<Table> &table)
+{
+    if (!table)
+    {
+        throw std::invalid_argument("Cannot add null table");
+    }
+
+    const std::string &tableName = table->tableName;
+
+    // Check if a table with this name already exists
+    if (tables.find(tableName) != tables.end())
+    {
+        throw std::runtime_error("Table already exists: " + tableName);
+    }
+
+    // Create a new unique_ptr by cloning the table data
+    // This is necessary because we're converting from shared_ptr to unique_ptr
+    tables[tableName] = std::make_unique<Table>(
+        tableName,
+        table->headers,
+        table->getData(),
+        table->getColumnTypes());
+}
+
 void StorageManager::renameTable(const std::string &oldName, const std::string &newName)
 {
     // Check if old table exists

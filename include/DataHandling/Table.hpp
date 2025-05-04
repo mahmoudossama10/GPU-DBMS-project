@@ -1,38 +1,11 @@
 #pragma once
-
+#include "../Utilities/UnionUtils.hpp"
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <stdexcept>
 
 // Define datetime structure
-struct dateTime
-{
-    unsigned short year;
-    unsigned short month;
-    unsigned short day;
-    unsigned char hour;
-    unsigned char minute;
-    unsigned char second;
-};
-
-// Define union for mixed data types
-union unionV
-{
-    std::string *s;
-    int64_t i;
-    double d;
-    dateTime *t;
-};
-
-// Enum for column types
-enum class ColumnType
-{
-    STRING,
-    INTEGER,
-    DOUBLE,
-    DATETIME
-};
 
 struct ForeignKeyInfo
 {
@@ -83,6 +56,7 @@ public:
     const std::vector<int> &getIntColumn(const std::string &colName) const;
     std::string tableName;
     std::unordered_map<std::string, std::vector<unionV>> columnData; // Column-major data
+    std::vector<std::string> headers;
 
 private:
     void processHeaders(const std::vector<std::string> &originalHeaders);
@@ -97,7 +71,6 @@ private:
     unionV stringToUnion(const std::string &str, ColumnType type);
 
     std::string alias;
-    std::vector<std::string> headers;
     std::unordered_map<std::string, ColumnType> columnTypes;
     std::unordered_map<std::string, size_t> columnIndices;
     std::vector<std::string> primaryKeys;

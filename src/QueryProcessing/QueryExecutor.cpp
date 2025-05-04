@@ -1,36 +1,219 @@
 #include "../../include/QueryProcessing/QueryExecutor.hpp"
 #include "../../include/QueryProcessing/PlanBuilder.hpp"
 #include "Utilities/ErrorHandling.hpp"
+#include "Utilities/UnionUtils.hpp"
+
 #include <iostream>
 #include <hsql/util/sqlhelper.h>
 #include <regex>
+#include <memory>
+#include <unordered_set>
 
 QueryExecutor::QueryExecutor(std::shared_ptr<StorageManager> storage)
     : storage_(storage),
       plan_builder_(std::make_unique<PlanBuilder>(storage)) {}
 
+SubqueryInfo QueryExecutor::extractSubquery(const std::string &query)
+{
+    SubqueryInfo result;
+    result.alias = "";
+    result.original_query = query;
+    result.after_from = false;
+    result.after_where_in = false;
+
+    // Pattern to match subqueries - looks for pattern ( SELECT ... ) [AS] alias
+    // Using regex with balanced parentheses is tricky, so we'll use a different approach
+
+    // Find the position of the first opening parenthesis that is followed by "SELECT" or "select"
+    size_t openPos = std::string::npos;
+    for (size_t i = 0; i < query.length(); ++i)
+    {
+        if (query[i] == '(')
+        {
+            // Check if "SELECT" or "select" follows, ignoring whitespace
+            size_t j = i + 1;
+            while (j < query.length() && std::isspace(query[j]))
+                ++j;
+
+            if (j + 6 <= query.length() &&
+                (query.substr(j, 6) == "SELECT" || query.substr(j, 6) == "select"))
+            {
+                openPos = i;
+
+                // Check if the subquery comes after FROM keyword
+                std::string beforeSubquery = query.substr(0, i);
+                std::regex fromPattern(R"(FROM\s+$|FROM\s+.*?[^\w])");
+                if (std::regex_search(beforeSubquery, fromPattern))
+                {
+                    result.after_from = true;
+                }
+
+                // Check if the subquery comes after IN keyword following WHERE
+                std::regex whereInPattern(R"(WHERE\s+.*\bIN\s*$|WHERE\s+.*\bIN\s+.*?[^\w])");
+                if (std::regex_search(beforeSubquery, whereInPattern))
+                {
+                    result.after_where_in = true;
+                }
+
+                break;
+            }
+        }
+    }
+
+    if (openPos == std::string::npos)
+    {
+        // No subquery found
+        result.modified_query = query;
+        return result;
+    }
+
+    // Find the matching closing parenthesis
+    size_t closePos = openPos;
+    int level = 0;
+
+    for (size_t i = openPos; i < query.length(); ++i)
+    {
+        if (query[i] == '(')
+        {
+            level++;
+        }
+        else if (query[i] == ')')
+        {
+            level--;
+            if (level == 0)
+            {
+                closePos = i;
+                break;
+            }
+        }
+    }
+
+    if (level != 0)
+    {
+        // Unbalanced parentheses
+        result.modified_query = query;
+        return result;
+    }
+
+    // Extract the subquery (without the parentheses)
+    result.subquery = query.substr(openPos + 1, closePos - openPos - 1);
+
+    // Look for an alias after the closing parenthesis
+    std::regex aliasRegex(R"(\)\s+(?:AS\s+|as\s+)?([a-zA-Z][a-zA-Z0-9_]*))");
+    std::smatch aliasMatch;
+
+    std::string afterClose = query.substr(closePos);
+    if (std::regex_search(afterClose, aliasMatch, aliasRegex))
+    {
+        result.alias = aliasMatch[1].str();
+    }
+
+    // Replace the subquery WITH ITS BRACKETS with just "sub_query" in the original query
+    result.modified_query = query.substr(0, openPos) + "sub_query" + query.substr(closePos + 1);
+
+    return result;
+}
+
 std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
 {
-    hsql::SQLParserResult result;
-    hsql::SQLParser::parse(query, &result);
+
     // hsql::printStatementInfo(result.getStatement(0));
-    if (!result.isValid())
-    {
-        throw SyntaxError("Parse error: " + std::string(result.errorMsg()));
-    }
 
-    if (result.size() != 1)
-    {
-        throw SyntaxError("Only single-statement queries supported");
-    }
+    auto subQuery = extractSubquery(query);
 
-    const auto *stmt = result.getStatement(0);
-    if (stmt->type() != hsql::kStmtSelect)
+    if (subQuery.subquery == "")
     {
-        throw SyntaxError("Only SELECT statements supported");
+        hsql::SQLParserResult result;
+        hsql::SQLParser::parse(query, &result);
+        const auto *stmt = result.getStatement(0);
+        return execute(static_cast<const hsql::SelectStatement *>(stmt), query);
     }
+    else
+    {
+        hsql::SQLParserResult result;
+        hsql::SQLParser::parse(subQuery.subquery, &result);
+        const auto *stmt = result.getStatement(0);
+        auto resultTable = execute(static_cast<const hsql::SelectStatement *>(stmt), subQuery.subquery);
+        resultTable->setAlias(subQuery.alias);
+        // Step 1: Preview the stripped headers
+        std::vector<std::string> strippedHeaders;
+        strippedHeaders.reserve(resultTable->headers.size());
 
-    return execute(static_cast<const hsql::SelectStatement *>(stmt), query);
+        for (const auto &header : resultTable->headers)
+        {
+            size_t lastDot = header.rfind('.');
+            if (lastDot != std::string::npos && lastDot + 1 < header.size())
+            {
+                strippedHeaders.push_back(header.substr(lastDot + 1));
+            }
+            else
+            {
+                strippedHeaders.push_back(header); // No change
+            }
+        }
+
+        // Step 2: Check for duplicates
+        std::unordered_set<std::string> seen;
+        bool hasDuplicates = false;
+        for (const auto &h : strippedHeaders)
+        {
+            if (!seen.insert(h).second)
+            {
+                hasDuplicates = true;
+                break;
+            }
+        }
+
+        // Step 3: Apply only if no duplicates
+        if (!hasDuplicates)
+        {
+            resultTable->headers = strippedHeaders;
+        }
+
+        if (subQuery.after_from)
+        {
+            std::string oldName = resultTable->getName();
+            std::string newName = "sub_query";
+
+            auto it = storage_->tables.find(oldName);
+            if (it != storage_->tables.end())
+            {
+                storage_->renameTable(resultTable->getName(), "sub_query");
+            }
+            else
+            {
+                resultTable->tableName = "sub_query";
+                storage_->addTable(resultTable);
+            }
+        }
+        else
+        {
+            auto aggValue = resultTable->getRow(0)[0];
+            auto aggType = resultTable->getColumnType(resultTable->headers[0]);
+
+            // Create a deep copy of the union value if needed
+            auto stringValue = UnionUtils::valueToString(aggValue, aggType);
+
+            std::string toReplace = "sub_query";
+
+            size_t pos = subQuery.modified_query.find(toReplace);
+            if (pos != std::string::npos)
+            {
+                subQuery.modified_query.replace(pos, toReplace.length(), stringValue);
+            }
+        }
+
+        hsql::SQLParserResult result2;
+        hsql::SQLParser::parse(subQuery.modified_query, &result2);
+        const auto *stmt2 = result2.getStatement(0);
+
+        std::string outputPath = "../../data/input/sub_query_new.csv";
+        CSVProcessor::saveCSV(outputPath, resultTable->getHeaders(), resultTable->getData(), resultTable->getColumnTypes()); // CSVProcessor needs to be updated too
+        std::cout << "Saved output to '" << outputPath << "'\n";
+
+        cleanupBatchTables();
+        return execute(static_cast<const hsql::SelectStatement *>(stmt2), subQuery.modified_query);
+    }
 }
 
 std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt, const std::string &query)
@@ -83,7 +266,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     // std::vector<std::string> allTableNames = storage_->getTableNames();
 
     // Constant for batch size
-    const size_t BATCH_SIZE = 20000;
+    const size_t BATCH_SIZE = 500;
 
     // Create batched tables from all tables
     for (int i = 0; i < allTableNames.size(); i++)
@@ -146,6 +329,24 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 
     // Process query on batched tables recursively
     std::shared_ptr<Table> result = processBatchedQuery(stmt, query);
+
+    /*
+    agg
+
+    call aggregate with hsql select list
+
+    project
+
+    check if their is other thing than agg fucntions do the project and then add a new columns with aggregate values of the sam table size and then addthese new columns
+    to the table
+
+
+
+    order by
+
+    call order by
+
+    */
 
     // Cleanup batch tables and restore original tables
 

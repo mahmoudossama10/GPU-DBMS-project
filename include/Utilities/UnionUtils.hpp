@@ -34,5 +34,5 @@ namespace UnionUtils
 {
 
     unionV copyUnionValue(const unionV &value, ColumnType type);
-
+    std::string valueToString(unionV aggValue, ColumnType aggType);
 }

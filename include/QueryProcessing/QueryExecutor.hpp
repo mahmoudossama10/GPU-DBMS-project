@@ -4,11 +4,29 @@
 #include "../DataHandling/Table.hpp"
 #include "../DataHandling/StorageManager.hpp"
 #include "../QueryProcessing/PlanBuilder.hpp"
+#include "../DataHandling/CSVProcessor.hpp"
+#include <iostream>
+#include <string>
+#include <regex>
+#include <optional>
+#include <utility>
+
+// Structure to hold the extracted information
+struct SubqueryInfo
+{
+    std::string original_query; // The original full query
+    std::string modified_query; // Query with subquery replaced by "sub_query"
+    std::string subquery;       // The extracted subquery
+    std::string alias;          // The alias of the subquery (if any)
+    bool after_from;            // Whether the subquery comes after FROM
+    bool after_where_in;        // Whether the subquery comes after IN following WHERE
+};
 
 class QueryExecutor
 {
 public:
     explicit QueryExecutor(std::shared_ptr<StorageManager> storage);
+    SubqueryInfo extractSubquery(const std::string &query);
 
     std::shared_ptr<Table> execute(const std::string &query);
     std::shared_ptr<Table> execute(const hsql::SelectStatement *stmt, const std::string &query);
