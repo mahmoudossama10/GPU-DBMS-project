@@ -66,13 +66,13 @@ namespace
     }
 
 }
-ProjectPlan::ProjectPlan(std::unique_ptr<ExecutionPlan> input,
+ProjectPlan::ProjectPlan(std::shared_ptr<Table> input,
                          const std::vector<hsql::Expr *> &select_list)
-    : input_(std::move(input)), select_list_(select_list) {}
+    : input_(input), select_list_(select_list) {}
 
 std::shared_ptr<Table> ProjectPlan::execute()
 {
-    auto input_table = input_->execute();
+    auto input_table = input_;
 
     if (!isSelectAll(&select_list_) && selectListNeedsProjection(select_list_))
     {

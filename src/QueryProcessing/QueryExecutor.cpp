@@ -179,11 +179,13 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
             if (it != storage_->tables.end())
             {
                 storage_->renameTable(resultTable->getName(), "sub_query");
+                storage_->tables.at("sub_query")->setAlias(subQuery.alias);
             }
             else
             {
                 resultTable->tableName = "sub_query";
                 storage_->addTable(resultTable);
+                storage_->tables.at("sub_query")->setAlias(subQuery.alias);
             }
         }
         else
@@ -348,8 +350,14 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 
     */
 
-    // Cleanup batch tables and restore original tables
+    if (!plan_builder_->isSelectAll(stmt->selectList) && plan_builder_->selectListNeedsProjection(*(stmt->selectList)))
+    {
+        result = plan_builder_->buildProjectPlan(result, *(stmt->selectList));
+    }
 
+    // result = plan_builder_->buildOrderByPlan(result, *stmt->order);
+    // Cleanup batch tables and restore original tables
+    cleanupBatchTables();
     return result;
 }
 
@@ -596,6 +604,44 @@ std::string QueryExecutor::replaceTableNameInQuery(const std::string &query,
 {
     std::string modifiedQuery = query;
 
+    // If oldAlias is empty, simply replace all occurrences of oldName with newName
+    // making sure they are standalone identifiers
+    if (oldAlias.empty())
+    {
+        size_t pos = 0;
+        while ((pos = modifiedQuery.find(oldName, pos)) != std::string::npos)
+        {
+            // Check if this is a standalone occurrence of the table name
+            bool isStandalone = true;
+
+            // Check if preceded by non-identifier character
+            if (pos > 0 && (isalnum(modifiedQuery[pos - 1]) || modifiedQuery[pos - 1] == '_'))
+            {
+                isStandalone = false;
+            }
+
+            // Check if followed by non-identifier character
+            if (pos + oldName.length() < modifiedQuery.length() &&
+                (isalnum(modifiedQuery[pos + oldName.length()]) || modifiedQuery[pos + oldName.length()] == '_'))
+            {
+                isStandalone = false;
+            }
+
+            if (isStandalone)
+            {
+                // Replace the table name
+                modifiedQuery.replace(pos, oldName.length(), newName);
+                pos += newName.length(); // Move position forward to avoid multiple replacements
+            }
+            else
+            {
+                pos += oldName.length(); // Skip if not standalone
+            }
+        }
+
+        return modifiedQuery;
+    }
+
     size_t pos = 0;
     while ((pos = modifiedQuery.find(oldName, pos)) != std::string::npos)
     {
@@ -701,6 +747,7 @@ std::string QueryExecutor::replaceTableNameInQuery(const std::string &query,
             pos += oldName.length(); // Skip if no space is found after table name
         }
     }
+
     return modifiedQuery;
 }
 

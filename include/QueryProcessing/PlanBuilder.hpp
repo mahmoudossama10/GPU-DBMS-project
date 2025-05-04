@@ -25,11 +25,6 @@
 #include "../DataHandling/StorageManager.hpp"
 #include "GPU.hpp" // Include the GPU header
 
-
-
-
-
-
 // Flag to control GPU acceleration
 enum class ExecutionMode
 {
@@ -97,7 +92,8 @@ class PlanBuilder
 {
 public:
     explicit PlanBuilder(std::shared_ptr<StorageManager> storage, ExecutionMode mode = ExecutionMode::CPU);
-
+    bool isSelectAll(const std::vector<hsql::Expr *> *selectList);
+    bool selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList);
     // Set execution mode (CPU or GPU)
     void setExecutionMode(ExecutionMode mode);
 
@@ -106,6 +102,14 @@ public:
 
     std::unique_ptr<ExecutionPlan> convertDuckDBPlanToExecutionPlan(const hsql::SelectStatement *stmt,
                                                                     std::unique_ptr<duckdb::LogicalOperator> duckdb_plan, int cnt);
+
+    std::shared_ptr<Table> buildOrderByPlan(
+        std::shared_ptr<Table> input,
+        const std::vector<hsql::OrderDescription *> &order_exprs);
+
+    std::shared_ptr<Table> buildProjectPlan(
+        std::shared_ptr<Table> input,
+        const std::vector<hsql::Expr *> &select_list);
 
 private:
     std::shared_ptr<StorageManager> storage_;
@@ -132,26 +136,23 @@ private:
     hsql::Expr *processWhereClause(const hsql::Expr *where);
 
     // Other plan builders
-    std::unique_ptr<ExecutionPlan> buildProjectPlan(
-        std::unique_ptr<ExecutionPlan> input,
-        const std::vector<hsql::Expr *> &select_list);
 
     std::unique_ptr<ExecutionPlan> buildAggregatePlan(
         std::unique_ptr<ExecutionPlan> input,
         const std::vector<hsql::Expr *> &select_list);
 
-    std::unique_ptr<ExecutionPlan> buildOrderByPlan(
-        std::unique_ptr<ExecutionPlan> input,
-        const std::vector<hsql::OrderDescription *> &order_exprs);
-
     std::unique_ptr<ExecutionPlan> buildGPUJoinPlan(
         std::unique_ptr<ExecutionPlan> leftTable,
         std::unique_ptr<ExecutionPlan> rightTable,
         std::string where);
+
     // Check if a table reference has a subquery
     bool hasSubqueryInTableRef(const hsql::TableRef *table);
 
     std::unique_ptr<ExecutionPlan> buildGPUJoinPlanMultipleTable(
         std::vector<std::unique_ptr<ExecutionPlan>> tables,
         std::string where);
+
+    std::unique_ptr<ExecutionPlan> buildPassPlane(
+        std::unique_ptr<ExecutionPlan> input);
 };

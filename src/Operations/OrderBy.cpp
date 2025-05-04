@@ -1,148 +1,115 @@
-// #include "../../include/Operations/OrderBy.hpp"
-// #include "../../include/Utilities/ErrorHandling.hpp"
-// #include "../../include/Utilities/StringUtils.hpp"
-// #include "../../include/Operations/GPUAggregator.hpp"
-// #include <algorithm>
-// #include <stdexcept>
-// #include <cmath>
+#include "../../include/Operations/OrderBy.hpp"
+#include "../../include/Utilities/StringUtils.hpp"
+#include "Utilities/ErrorHandling.hpp"
+#include <algorithm>
 
-// using namespace StringUtils;
+OrderByPlan::OrderByPlan(std::shared_ptr<Table> input,
+                         const std::vector<hsql::OrderDescription *> &order_exprs)
+    : input_(std::move(input)), order_exprs_(order_exprs) {}
 
-// OrderByPlan::OrderByPlan(std::unique_ptr<ExecutionPlan> input,
-//                          const std::vector<hsql::OrderDescription *> &order_exprs)
-//     : input_(std::move(input)), order_exprs_(order_exprs) {}
+std::shared_ptr<Table> OrderByPlan::execute()
+{
+    std::shared_ptr<Table> table = input_;
+    if (!table || table->getData().empty())
+        return table;
 
-// std::shared_ptr<Table> OrderByPlan::execute()
-// {
-//     auto input_table = input_->execute();
-//     auto sort_cols = parseOrderBy(*input_table);
+    std::vector<SortColumn> sort_cols = parseOrderBy(*table);
 
-//     // --- Only support single int ORDER BY in this version ---
-//     if (sort_cols.size() != 1)
-//         throw SemanticError("Only single-column ORDER BY supported for GPU.");
+    std::vector<std::vector<unionV>> sorted_rows;
+    const auto &data_map = table->getData();
+    size_t num_rows = data_map.begin()->second.size();
+    sorted_rows.resize(num_rows);
 
-//     const auto &colname = input_table->getHeaders()[sort_cols[0].column_index];
-//     bool ascending = sort_cols[0].is_ascending;
+    for (const auto &[col_name, col_values] : data_map)
+    {
+        for (size_t i = 0; i < num_rows; ++i)
+        {
+            if (sorted_rows[i].size() < data_map.size())
+                sorted_rows[i].resize(data_map.size());
+            sorted_rows[i][table->getColumnIndex(col_name)] = col_values[i];
+        }
+    }
 
-//     // Try int column (fastest, canonical case for benchmarking!)
-//     try
-//     {
-//         // Use your Table column cache
-//         const auto &col_data = input_table->getIntColumn(colname);
+    std::sort(sorted_rows.begin(), sorted_rows.end(),
+              [&](const std::vector<unionV> &a, const std::vector<unionV> &b)
+              {
+                  return compareRows(a, b, sort_cols);
+              });
 
-//         // GPU sort
-//         std::vector<int> indices = GPUAggregator::gpuArgsortInt(col_data, ascending);
+    std::unordered_map<std::string, std::vector<unionV>> sorted_data_map;
+    const auto &headers = table->getHeaders();
+    for (size_t col_idx = 0; col_idx < headers.size(); ++col_idx)
+    {
+        std::vector<unionV> column_data;
+        column_data.reserve(sorted_rows.size());
+        for (const auto &row : sorted_rows)
+        {
+            column_data.push_back(row[col_idx]);
+        }
+        sorted_data_map[headers[col_idx]] = std::move(column_data);
+    }
 
-//         // Reorder rows
-//         std::vector<std::vector<std::string>> sorted_data;
-//         sorted_data.reserve(indices.size());
-//         for (int idx : indices)
-//             sorted_data.push_back(input_table->getRow(idx));
+    return std::make_shared<Table>(
+        table->getName() + "_ordered",
+        table->getHeaders(),
+        std::move(sorted_data_map),
+        table->getColumnTypes());
+}
 
-//         // Return sorted table
-//         return std::make_shared<Table>(
-//             input_table->getName() + "_sorted",
-//             input_table->getHeaders(),
-//             sorted_data);
-//     }
-//     catch (...)
-//     {
-//         // Fallback to CPU or string-based sort if int conversion fails
-//         auto sorted_data = input_table->getData();
-//         std::sort(sorted_data.begin(), sorted_data.end(),
-//                   [&](const auto &a, const auto &b)
-//                   {
-//                       return ascending
-//                                  ? a[sort_cols[0].column_index] < b[sort_cols[0].column_index]
-//                                  : a[sort_cols[0].column_index] > b[sort_cols[0].column_index];
-//                   });
-//         return std::make_shared<Table>(
-//             input_table->getName() + "_sorted",
-//             input_table->getHeaders(),
-//             sorted_data);
-//     }
-// }
+std::vector<OrderByPlan::SortColumn> OrderByPlan::parseOrderBy(const Table &table) const
+{
+    std::vector<SortColumn> sort_cols;
 
-// std::vector<OrderByPlan::SortColumn> OrderByPlan::parseOrderBy(const Table &table) const
-// {
-//     std::vector<SortColumn> sort_cols;
+    for (const auto *order_desc : order_exprs_)
+    {
+        if (order_desc->type != hsql::kOrderAsc && order_desc->type != hsql::kOrderDesc)
+            throw std::runtime_error("Unsupported ORDER BY type");
 
-//     for (const auto *order_desc : order_exprs_)
-//     {
-//         const auto *expr = order_desc->expr;
-//         if (expr->type != hsql::kExprColumnRef)
-//         {
-//             throw SemanticError("Complex ORDER BY expressions not supported");
-//         }
+        const hsql::Expr *expr = order_desc->expr;
+        if (!expr || expr->type != hsql::kExprColumnRef)
+            throw std::runtime_error("Only column references are supported in ORDER BY");
 
-//         SortColumn sc;
-//         sc.column_index = table.getColumnIndex(expr->name);
-//         sc.is_ascending = (order_desc->type == hsql::kOrderAsc);
+        std::string col_name = expr->name;
+        size_t col_idx = table.getColumnIndex(col_name);
+        col_name = table.getHeaders()[col_idx];
+        ColumnType col_type = table.getColumnType(col_name);
 
-//         // Detect numeric column
-//         sc.is_numeric = true;
-//         try
-//         {
-//             const auto &column_values = table.getData().at(expr->name);
-//             for (const auto &value : column_values)
-//             {
-//                 if (!value.empty())
-//                 { // Skip empty values
-//                     try
-//                     {
-//                         std::stod(value);
-//                         sc.is_numeric = true;
-//                         break; // Only need one valid number to confirm
-//                     }
-//                     catch (const std::exception &)
-//                     {
-//                         // Conversion failed, not a numeric column
-//                     }
-//                 }
-//             }
-//         }
-//         catch (...)
-//         {
-//             sc.is_numeric = false;
-//         }
+        sort_cols.push_back({col_idx, order_desc->type == hsql::kOrderAsc, col_type});
+    }
 
-//         sort_cols.push_back(sc);
-//     }
-//     return sort_cols;
-// }
+    return sort_cols;
+}
 
-// bool OrderByPlan::compareRows(const std::vector<std::string> &a,
-//                               const std::vector<std::string> &b,
-//                               const std::vector<SortColumn> &sort_cols)
-// {
-//     for (const auto &sc : sort_cols)
-//     {
-//         const auto &val_a = a[sc.column_index];
-//         const auto &val_b = b[sc.column_index];
+bool OrderByPlan::compareRows(const std::vector<unionV> &a,
+                              const std::vector<unionV> &b,
+                              const std::vector<SortColumn> &sort_cols)
+{
+    for (const auto &sort_col : sort_cols)
+    {
+        const unionV &val_a = a[sort_col.column_index];
+        const unionV &val_b = b[sort_col.column_index];
 
-//         // Handle NULLs as smallest possible values
-//         if (val_a.empty() != val_b.empty())
-//         {
-//             return sc.is_ascending ? val_a.empty() : val_b.empty();
-//         }
+        int cmp = 0;
+        switch (sort_col.type)
+        {
+        case ColumnType::INTEGER:
+            cmp = (val_a.i < val_b.i) ? -1 : (val_a.i > val_b.i ? 1 : 0);
+            break;
+        case ColumnType::DOUBLE:
+            cmp = (val_a.d < val_b.d) ? -1 : (val_a.d > val_b.d ? 1 : 0);
+            break;
+        case ColumnType::STRING:
+            cmp = val_a.s->compare(*val_b.s);
+            break;
+        case ColumnType::DATETIME:
+            cmp = (val_a.d < val_b.d) ? -1 : (val_a.d > val_b.d ? 1 : 0);
+            break;
+        default:
+            throw SemanticError("Unsupported column type in ORDER BY");
+        }
 
-//         int comparison = 0;
-//         if (sc.is_numeric)
-//         {
-//             double num_a = std::stod(val_a);
-//             double num_b = std::stod(val_b);
-//             comparison = (num_a < num_b) ? -1 : (num_a > num_b) ? 1
-//                                                                 : 0;
-//         }
-//         else
-//         {
-//             comparison = toLower(val_a).compare(toLower(val_b));
-//         }
-
-//         if (comparison != 0)
-//         {
-//             return sc.is_ascending ? (comparison < 0) : (comparison > 0);
-//         }
-//     }
-//     return false; // Equal for all sort columns
-// }
+        if (cmp != 0)
+            return sort_col.is_ascending ? cmp < 0 : cmp > 0;
+    }
+    return false;
+}

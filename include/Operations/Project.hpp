@@ -10,12 +10,12 @@
 class ProjectPlan : public ExecutionPlan
 {
 public:
-    ProjectPlan(std::unique_ptr<ExecutionPlan> input,
+    ProjectPlan(std::shared_ptr<Table> input,
                 const std::vector<hsql::Expr *> &select_list);
     std::shared_ptr<Table> execute() override;
 
 private:
-    std::unique_ptr<ExecutionPlan> input_;
+    std::shared_ptr<Table> input_;
     std::vector<hsql::Expr *> select_list_;
 
     std::vector<std::string> getColumnNames() const;

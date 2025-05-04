@@ -101,35 +101,6 @@ namespace
         return *end == '\0';
     }
 
-    bool isSelectAll(const std::vector<hsql::Expr *> *selectList)
-    {
-        if (!selectList || selectList->empty())
-        {
-            return false;
-        }
-
-        for (auto *expr : *selectList)
-        {
-            if (expr->type == hsql::kExprStar)
-            {
-                return true;
-            }
-        }
-
-        // Check for "SELECT table.*" case
-        for (auto *expr : *selectList)
-        {
-            if (expr->type == hsql::kExprColumnRef &&
-                expr->table != nullptr &&
-                expr->name != nullptr &&
-                strcmp(expr->name, "*") == 0)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     bool hasAggregates(const std::vector<hsql::Expr *> &select_list)
     {
         for (auto *expr : select_list)
@@ -175,29 +146,6 @@ namespace
             }
         }
 
-        return false;
-    }
-
-    bool selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList)
-    {
-        // If * present, never project
-        for (auto *expr : selectList)
-            if (expr->type == hsql::kExprStar)
-                return false;
-
-        // If *table present, also never project
-        for (auto *expr : selectList)
-        {
-            if (expr->type == hsql::kExprColumnRef && expr->name && std::strcmp(expr->name, "*") == 0)
-                return false;
-        }
-
-        // If any non-aggregate expression, projection is required
-        for (auto *expr : selectList)
-            if (expr->type != hsql::kExprFunctionRef)
-                return true;
-
-        // All are aggregates: NO projection needed
         return false;
     }
 
@@ -307,6 +255,22 @@ private:
     std::shared_ptr<StorageManager> storage_;
     std::string table_name_;
     std::string alias_;
+};
+
+class PassPlan : public ExecutionPlan
+{
+public:
+    PassPlan(std::unique_ptr<ExecutionPlan> input)
+        : input_(std::move(input)) {}
+
+    std::shared_ptr<Table> execute() override
+    {
+
+        return input_->execute();
+    }
+
+private:
+    std::unique_ptr<ExecutionPlan> input_;
 };
 
 // Implementation of GPUJoinPlan
@@ -424,6 +388,58 @@ void PlanBuilder::setExecutionMode(ExecutionMode mode)
     {
         gpu_manager_ = std::make_shared<GPUManager>();
     }
+}
+
+bool PlanBuilder::isSelectAll(const std::vector<hsql::Expr *> *selectList)
+{
+    if (!selectList || selectList->empty())
+    {
+        return false;
+    }
+
+    for (auto *expr : *selectList)
+    {
+        if (expr->type == hsql::kExprStar)
+        {
+            return true;
+        }
+    }
+
+    // Check for "SELECT table.*" case
+    for (auto *expr : *selectList)
+    {
+        if (expr->type == hsql::kExprColumnRef &&
+            expr->table != nullptr &&
+            expr->name != nullptr &&
+            strcmp(expr->name, "*") == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PlanBuilder::selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList)
+{
+    // If * present, never project
+    for (auto *expr : selectList)
+        if (expr->type == hsql::kExprStar)
+            return false;
+
+    // If *table present, also never project
+    for (auto *expr : selectList)
+    {
+        if (expr->type == hsql::kExprColumnRef && expr->name && std::strcmp(expr->name, "*") == 0)
+            return false;
+    }
+
+    // If any non-aggregate expression, projection is required
+    for (auto *expr : selectList)
+        if (expr->type != hsql::kExprFunctionRef)
+            return true;
+
+    // All are aggregates: NO projection needed
+    return false;
 }
 
 // std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *stmt, const std::string &query)
@@ -636,7 +652,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     }
 
     // 2. Find additional tables in comma-separated list (e.g., "table1, table2 t2, table3 t3")
-    std::regex comma_pattern("(?:FROM|,)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*,|\\s+WHERE|$)");
+    std::regex comma_pattern(R"((?:FROM|,)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:AS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*,|\s+WHERE|$))");
     std::smatch comma_match;
     std::string::const_iterator comma_search(sql_query.cbegin());
 
@@ -870,7 +886,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
         //     std::cout << entry.first << ": " << entry.second << std::endl;
         // }
 
-        plan = buildProjectPlan(std::move(children[0]), *(stmt->selectList));
+        plan = buildPassPlane(std::move(children[0]));
 
         // // Convert projection expressions
         // std::vector<hsql::Expr *> select_list;
@@ -1102,27 +1118,21 @@ std::vector<std::pair<std::string, std::string>> PlanBuilder::extractTableRefere
 //     return nullptr;
 // }
 
-std::unique_ptr<ExecutionPlan> PlanBuilder::buildProjectPlan(
-    std::unique_ptr<ExecutionPlan> input,
+std::shared_ptr<Table> PlanBuilder::buildProjectPlan(
+    std::shared_ptr<Table> input,
     const std::vector<hsql::Expr *> &select_list)
 {
-    // Process any subqueries in the SELECT list
     std::vector<hsql::Expr *> processed_select_list = select_list;
-    // for (auto &expr : processed_select_list)
-    // {
-    //     if (expr->type == hsql::kExprSelect)
-    //     {
-    //         // Process subquery and replace with a constant expression
-    //         auto subquery_result = processSubqueryExpression(expr);
-    //         // Replace the original expr with processed one if needed
-    //         if (subquery_result)
-    //         {
-    //             expr = subquery_result;
-    //         }
-    //     }
-    // }
 
-    return std::make_unique<ProjectPlan>(std::move(input), processed_select_list);
+    auto plan = std::make_unique<ProjectPlan>(input, processed_select_list);
+    return plan->execute();
+}
+
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildPassPlane(
+    std::unique_ptr<ExecutionPlan> input)
+{
+
+    return std::make_unique<PassPlan>(std::move(input));
 }
 
 // std::unique_ptr<ExecutionPlan> PlanBuilder::buildAggregatePlan(
@@ -1132,12 +1142,14 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildProjectPlan(
 //     return std::make_unique<AggregatorPlan>(std::move(input), select_list);
 // }
 
-// std::unique_ptr<ExecutionPlan> PlanBuilder::buildOrderByPlan(
-//     std::unique_ptr<ExecutionPlan> input,
-//     const std::vector<hsql::OrderDescription *> &order_exprs)
-// {
-//     return std::make_unique<OrderByPlan>(std::move(input), order_exprs);
-// }
+std::shared_ptr<Table> PlanBuilder::buildOrderByPlan(
+    std::shared_ptr<Table> input,
+    const std::vector<hsql::OrderDescription *> &order_exprs)
+{
+    auto plan = std::make_unique<OrderByPlan>(input, order_exprs);
+    auto result = plan->execute();
+    return result;
+}
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
 {
