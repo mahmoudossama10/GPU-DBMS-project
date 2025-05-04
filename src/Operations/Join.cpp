@@ -38,7 +38,6 @@ std::shared_ptr<Table> JoinPlan::execute()
 
     // Compute product with the new unionV column data structure
     auto columnData = computeProduct(*left_table, *right_table, resultColumnTypes);
-
     return std::make_shared<Table>(
         "JoinedTable",
         headers,

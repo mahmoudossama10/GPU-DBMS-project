@@ -9,7 +9,8 @@ public:
     void loadTable(const std::string &tableName, const std::string &filepath);
     Table &getTable(const std::string &tableName);
     bool tableExists(const std::string &tableName) const;
+    std::vector<std::string> getTableNames() const;
+    void renameTable(const std::string &oldName, const std::string &newName);
 
-private:
     std::unordered_map<std::string, std::unique_ptr<Table>> tables;
 };

@@ -27,3 +27,42 @@ bool StorageManager::tableExists(const std::string &tableName) const
 {
     return tables.find(tableName) != tables.end();
 }
+
+void StorageManager::renameTable(const std::string &oldName, const std::string &newName)
+{
+    // Check if old table exists
+    auto it = tables.find(oldName);
+    if (it == tables.end())
+    {
+        throw std::runtime_error("Table not found: " + oldName);
+    }
+
+    // Check if new table name already exists
+    if (tables.find(newName) != tables.end())
+    {
+        throw std::runtime_error("Table already exists: " + newName);
+    }
+
+    // Save the pointer to the table
+    std::unique_ptr<Table> table = std::move(it->second);
+
+    // Update the table's internal name
+    table->tableName = newName;
+
+    // Remove old entry and add new one
+    tables.erase(it);
+    tables[newName] = std::move(table);
+}
+
+std::vector<std::string> StorageManager::getTableNames() const
+{
+    std::vector<std::string> names;
+    names.reserve(tables.size());
+
+    for (const auto &[name, _] : tables)
+    {
+        names.push_back(name);
+    }
+
+    return names;
+}

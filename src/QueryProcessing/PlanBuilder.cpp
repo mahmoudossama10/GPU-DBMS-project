@@ -319,6 +319,13 @@ GPUJoinPlan::GPUJoinPlan(std::unique_ptr<ExecutionPlan> leftTable,
       whereString(where),
       gpu_manager_(gpu_manager) {}
 
+GPUJoinPlanMultipleTable::GPUJoinPlanMultipleTable(std::vector<std::unique_ptr<ExecutionPlan>> tables,
+                                                   std::string where,
+                                                   std::shared_ptr<GPUManager> gpu_manager)
+    : tablesExecutionPlan_(std::move(tables)),
+      whereString(where),
+      gpu_manager_(gpu_manager) {}
+
 void collectConditions(const hsql::Expr *expr, std::vector<const hsql::Expr *> &conditions)
 {
     if (expr == nullptr)
@@ -376,6 +383,29 @@ std::shared_ptr<Table> GPUJoinPlan::execute()
     // Multi-table join with batched processing
     // return gpu_manager_->executeBatchedJoin(tables_, where_clause_);
     return gpu_manager_->executeTwoTableJoinWithBinarySearch(leftTableData, rightTableData, selectStmt->whereClause);
+}
+
+std::shared_ptr<Table> GPUJoinPlanMultipleTable::execute()
+{
+    std::string sqlStatement = "SELECT * FROM dummy WHERE " + whereString;
+
+    // Parse the SQL statement
+    hsql::SQLParserResult result;
+    hsql::SQLParser::parse(sqlStatement, &result);
+
+    const auto *stmt = result.getStatement(0);
+
+    auto selectStmt = static_cast<const hsql::SelectStatement *>(stmt);
+    // Need to convert DuckDB's filter expression to HSQL
+
+    for (auto &tempPlan : tablesExecutionPlan_)
+    {
+        tablesData_.push_back(tempPlan->execute());
+    }
+
+    // Multi-table join with batched processing
+    // return gpu_manager_->executeBatchedJoin(tables_, where_clause_);
+    return gpu_manager_->executeMultipleTableJoin(tablesData_, selectStmt->whereClause);
 }
 
 PlanBuilder::PlanBuilder(std::shared_ptr<StorageManager> storage, ExecutionMode mode)
@@ -516,9 +546,66 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     duckdb::Connection con(db);
 
     // Get query plan from DuckDB
-    con.Query("CREATE TABLE employees AS SELECT * FROM read_csv_auto('./data/input/employees_new.csv');");
-    con.Query("CREATE TABLE departments AS SELECT * FROM read_csv_auto('./data/input/departments_new.csv');");
-    con.Query("CREATE TABLE projects AS SELECT * FROM read_csv_auto('./data/input/projects_new.csv');");
+    std::vector<std::string> loaded_tables;
+
+    // Dynamically create tables based on the query
+    if (stmt->fromTable)
+    {
+        if (stmt->fromTable->type == hsql::kTableCrossProduct)
+        {
+            for (hsql::TableRef *tbl : *stmt->fromTable->list)
+            {
+                if (tbl->type == hsql::kTableName)
+                {
+                    std::string table_name = tbl->name;
+
+                    // if (tbl->alias != nullptr)
+                    //     table_name = std::string(tbl->name) + "_" + tbl->alias->name;
+                    // else
+                    table_name = std::string(tbl->name);
+                    std::string file_name = "";
+
+                    size_t pos = table_name.find("batch");
+                    if (pos != std::string::npos)
+                    {
+                        file_name = table_name.substr(0, pos);
+                    }
+                    else
+                    {
+                        file_name = table_name; // fallback to full name if "batch" not found
+                    }
+
+                    std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('../../data/input/" + file_name + "new.csv');";
+                    con.Query(create_query);
+                    loaded_tables.push_back(table_name);
+                }
+            }
+        }
+        else if (stmt->fromTable->type == hsql::kTableName)
+        {
+
+            std::string table_name = "";
+
+            // if (stmt->fromTable->alias != nullptr)
+            //     table_name = std::string(stmt->fromTable->name) + "_" + stmt->fromTable->alias->name;
+            // else
+            table_name = std::string(stmt->fromTable->name);
+            std::string file_name = "";
+            size_t pos = table_name.find("batch");
+            if (pos != std::string::npos)
+            {
+                file_name = table_name.substr(0, pos);
+            }
+            else
+            {
+                file_name = table_name; // fallback to full name if "batch" not found
+            }
+
+            std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('../../data/input/" + file_name + "new.csv');";
+            con.Query(create_query);
+            loaded_tables.push_back(table_name);
+        }
+    }
 
     std::string sql_query = query;
 
@@ -615,40 +702,40 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     }
 
     // Print the results
-    std::cout << "Original Query:\n"
-              << sql_query << "\n\n";
-    std::cout << "Modified Query:\n"
-              << modified_query << "\n\n";
+    // std::cout << "Original Query:\n"
+    //           << sql_query << "\n\n";
+    // std::cout << "Modified Query:\n"
+    //           << modified_query << "\n\n";
 
     for (int i = 0; i < table_names.size(); i++)
     {
         std::string rename_query = "ALTER TABLE " + table_names[i] + " RENAME COLUMN \"" + column_names[i] + "\" TO " + replaced_patterns[i] + ";";
-        std::cout << rename_query << '\n';
+        // std::cout << rename_query << '\n';
         con.Query(rename_query);
     }
-    std::cout << "Table Name -> Alias Mappings:\n";
-    for (const auto &[alias, table] : alias_map)
-    {
-        std::cout << table << " -> " << alias << "\n";
-    }
+    // std::cout << "Table Name -> Alias Mappings:\n";
+    // for (const auto &[alias, table] : alias_map)
+    // {
+    //     std::cout << table << " -> " << alias << "\n";
+    // }
 
-    std::cout << "\nExtracted Table Names (based on aliases in dot notation):\n";
-    for (const auto &name : table_names)
-    {
-        std::cout << name << "\n";
-    }
+    // // std::cout << "\nExtracted Table Names (based on aliases in dot notation):\n";
+    // for (const auto &name : table_names)
+    // {
+    //     std::cout << name << "\n";
+    // }
 
-    std::cout << "\nExtracted Column Names:\n";
-    for (const auto &name : column_names)
-    {
-        std::cout << name << "\n";
-    }
+    // // std::cout << "\nExtracted Column Names:\n";
+    // for (const auto &name : column_names)
+    // {
+    //     std::cout << name << "\n";
+    // }
 
-    std::cout << "\nFull Patterns (to be quoted):\n";
-    for (const auto &pattern : full_patterns)
-    {
-        std::cout << pattern << "\n";
-    }
+    // // std::cout << "\nFull Patterns (to be quoted):\n";
+    // for (const auto &pattern : full_patterns)
+    // {
+    //     std::cout << pattern << "\n";
+    // }
 
     auto duckdb_plan = con.ExtractPlan(modified_query);
 
@@ -660,7 +747,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
 std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(const hsql::SelectStatement *stmt,
                                                                              std::unique_ptr<duckdb::LogicalOperator> duckdb_plan, int cnt)
 {
-    std::cout << duckdb_plan->ToString() << std::endl;
+    // std::cout << duckdb_plan->ToString() << std::endl;
 
     // Base case for recursion
     if (!duckdb_plan)
@@ -673,7 +760,22 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
     for (auto &child : duckdb_plan->children)
     {
         cnt++;
-        children.push_back(convertDuckDBPlanToExecutionPlan(stmt, std::move(child), cnt));
+        if (child->type == duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT)
+        {
+            if (duckdb_plan->type == duckdb::LogicalOperatorType::LOGICAL_ANY_JOIN || duckdb_plan->type == duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN)
+            {
+                children.push_back(convertDuckDBPlanToExecutionPlan(stmt, std::move(child->children[0]), cnt));
+                children.push_back(convertDuckDBPlanToExecutionPlan(stmt, std::move(child->children[1]), cnt));
+            }
+            else
+            {
+                children.push_back(convertDuckDBPlanToExecutionPlan(stmt, std::move(child), cnt));
+            }
+        }
+        else
+        {
+            children.push_back(convertDuckDBPlanToExecutionPlan(stmt, std::move(child), cnt));
+        }
     }
 
     // Then create our node
@@ -733,7 +835,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
         default:
             break;
         }
-        std::cout << table_name << alias << '\n';
+        // std::cout << table_name << alias << '\n';
         plan = std::make_unique<TableScanPlan>(storage_, table_name, alias);
 
         if (filters != "")
@@ -779,6 +881,26 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
         // plan = std::make_unique<ProjectPlan>(std::move(children[0]), select_list);
         break;
     }
+        // case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN:
+        // {
+        //     auto *table_join = dynamic_cast<duckdb::LogicalComparisonJoin *>(duckdb_plan.get());
+        //     auto params = table_join->ParamsToString();
+        //     const auto &conditions = table_join->conditions;
+        //     std::string filter_condition_string = "";
+        //     for (const auto &entry : params)
+        //     {
+        //         if (entry.first == "Conditions")
+        //         {
+        //             filter_condition_string = entry.second;
+        //         }
+        //     }
+
+        //     auto where = insertAndBetweenConditions(filter_condition_string);
+
+        //     plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+        //     break;
+        // }
+
     case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN:
     {
         auto *table_join = dynamic_cast<duckdb::LogicalComparisonJoin *>(duckdb_plan.get());
@@ -795,7 +917,14 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
         auto where = insertAndBetweenConditions(filter_condition_string);
 
-        plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+        if (children.size() > 2)
+        {
+            plan = buildGPUJoinPlanMultipleTable(std::move(children), where);
+        }
+        else
+        {
+            plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+        }
         break;
     }
     case duckdb::LogicalOperatorType::LOGICAL_ANY_JOIN:
@@ -813,7 +942,15 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
         auto where = insertAndBetweenConditions(filter_condition_string);
 
-        plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+        if (children.size() > 2)
+        {
+            plan = buildGPUJoinPlanMultipleTable(std::move(children), where);
+        }
+        else
+        {
+            plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+        }
+
         break;
     }
     case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
@@ -1108,6 +1245,14 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUJoinPlan(
 {
     // WHERE clause should already be processed for subqueries by this point
     return std::make_unique<GPUJoinPlan>(std::move(leftTable), std::move(rightTable), where, gpu_manager_);
+}
+
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUJoinPlanMultipleTable(
+    std::vector<std::unique_ptr<ExecutionPlan>> tables,
+    std::string where)
+{
+    // WHERE clause should already be processed for subqueries by this point
+    return std::make_unique<GPUJoinPlanMultipleTable>(std::move(tables), where, gpu_manager_);
 }
 
 // // Process WHERE clauses that contain subqueries

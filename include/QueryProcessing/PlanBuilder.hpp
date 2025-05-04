@@ -65,6 +65,29 @@ private:
     std::shared_ptr<GPUManager> gpu_manager_;
 };
 
+class GPUJoinPlanMultipleTable : public ExecutionPlan
+{
+public:
+    // GPUJoinPlan(std::vector<std::shared_ptr<Table>> tables,
+    //             std::vector<std::string> table_names,
+    //             const hsql::Expr *where_clause,
+    //             std::shared_ptr<GPUManager> gpu_manager);
+
+    GPUJoinPlanMultipleTable(std::vector<std::unique_ptr<ExecutionPlan>> tables,
+                             std::string where,
+                             std::shared_ptr<GPUManager> gpu_manager);
+
+    std::shared_ptr<Table> execute() override;
+
+private:
+    std::vector<std::shared_ptr<Table>> tablesData_;
+    std::vector<std::string> table_names_;
+    const hsql::Expr *where_clause_;
+    std::vector<std::unique_ptr<ExecutionPlan>> tablesExecutionPlan_;
+    std::string whereString;
+    std::shared_ptr<GPUManager> gpu_manager_;
+};
+
 class PlanBuilder
 {
 public:
@@ -122,4 +145,8 @@ private:
         std::string where);
     // Check if a table reference has a subquery
     bool hasSubqueryInTableRef(const hsql::TableRef *table);
+
+    std::unique_ptr<ExecutionPlan> buildGPUJoinPlanMultipleTable(
+        std::vector<std::unique_ptr<ExecutionPlan>> tables,
+        std::string where);
 };

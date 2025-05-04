@@ -37,6 +37,10 @@ public:
         const std::shared_ptr<Table> &rightTable,
         hsql::Expr *condition);
 
+    std::shared_ptr<Table> executeMultipleTableJoin(
+        const std::vector<std::shared_ptr<Table>> &tables,
+        const hsql::Expr *joinConditions);
+
 private:
     // Flag indicating if GPU is available
     bool hasGPU_;
@@ -55,13 +59,11 @@ private:
     // Process a specific batch
     std::vector<int64_t> processBatch(
         const std::vector<std::shared_ptr<Table>> &tables,
-        const std::vector<std::vector<int>> &batchIndices,
         const hsql::Expr *conditions);
 
     // Evaluate condition on batch
     std::vector<int64_t> evaluateConditionOnBatch(
         const std::vector<std::shared_ptr<Table>> &tables,
-        const std::vector<std::vector<int>> &batchIndices,
         const hsql::Expr *condition);
 
     // Combine headers from multiple tables

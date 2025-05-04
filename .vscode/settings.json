@@ -87,6 +87,8 @@
         "__config": "cpp",
         "ios": "cpp",
         "locale": "cpp",
-        "__bit_reference": "cpp"
+        "__bit_reference": "cpp",
+        "__functional_base": "cpp",
+        "__string": "cpp"
     }
 }

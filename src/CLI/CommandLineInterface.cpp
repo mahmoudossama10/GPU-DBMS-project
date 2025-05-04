@@ -56,6 +56,50 @@ void CommandLineInterface::run()
     }
 }
 
+void CommandLineInterface::cleanupBatchTables()
+{
+    // Collect table names first to avoid modifying the map while iterating
+    std::vector<std::string> allTableNames = storageManager->getTableNames();
+    std::unordered_map<std::string, std::string> largeToOriginalMap;
+
+    // First pass: identify large tables and their original name
+    for (const auto &tableName : allTableNames)
+    {
+        if (tableName.find("_large") != std::string::npos)
+        {
+            std::string originalName = tableName.substr(0, tableName.find("_large"));
+            largeToOriginalMap[tableName] = originalName;
+        }
+    }
+
+    // Second pass: remove all batch tables
+    for (const auto &tableName : allTableNames)
+    {
+        if (tableName.find("_batch_") != std::string::npos)
+        {
+            storageManager->tables.erase(tableName);
+        }
+    }
+
+    // Third pass: rename large tables back to original names
+    for (const auto &[largeTableName, originalName] : largeToOriginalMap)
+    {
+        if (storageManager->tableExists(largeTableName))
+        {
+            // Get the large table and rename it back to the original name
+            // We need to create a new table with the original name
+            auto &largeTable = storageManager->getTable(largeTableName);
+            storageManager->tables[originalName] = std::make_unique<Table>(
+                originalName,
+                largeTable.getHeaders(),
+                largeTable.getData(),
+                largeTable.getColumnTypes());
+
+            // Remove the large table
+            storageManager->tables.erase(largeTableName);
+        }
+    }
+}
 void CommandLineInterface::processQuery(const std::string &query)
 {
     try
@@ -127,7 +171,7 @@ void CommandLineInterface::processQuery(const std::string &query)
             std::cout << totalRows << " rows returned\n";
 
             // Save full results to CSV
-            std::string outputPath = "./data/output/query_output.csv";
+            std::string outputPath = "../../data/output/query_output.csv";
             CSVProcessor::saveCSV(outputPath, result->getHeaders(), columnData, columnTypes); // CSVProcessor needs to be updated too
             std::cout << "Saved output to '" << outputPath << "'\n";
 
@@ -136,6 +180,7 @@ void CommandLineInterface::processQuery(const std::string &query)
             auto duration = duration_cast<milliseconds>(end - start);
 
             std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+            cleanupBatchTables();
         }
         else
         {

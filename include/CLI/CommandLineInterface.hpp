@@ -15,6 +15,7 @@ private:
     void handleLoadCommand(const std::vector<std::string> &args);
     void handleShowTablesCommand();
     void displayHelp();
+    void cleanupBatchTables();
 
     std::shared_ptr<StorageManager> storageManager;
 };

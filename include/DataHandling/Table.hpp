@@ -47,6 +47,7 @@ public:
           const std::vector<std::string> &originalHeaders,
           const std::unordered_map<std::string, std::vector<unionV>> &columnData,
           const std::unordered_map<std::string, ColumnType> &columnTypes);
+
     ~Table(); // Need destructor to handle memory management for string and datetime pointers
 
     // Accessors
@@ -80,6 +81,8 @@ public:
 
     // Get integer column as a convenience (cached)
     const std::vector<int> &getIntColumn(const std::string &colName) const;
+    std::string tableName;
+    std::unordered_map<std::string, std::vector<unionV>> columnData; // Column-major data
 
 private:
     void processHeaders(const std::vector<std::string> &originalHeaders);
@@ -93,12 +96,10 @@ private:
     // Convert string to appropriate union value based on type
     unionV stringToUnion(const std::string &str, ColumnType type);
 
-    std::string tableName;
     std::string alias;
     std::vector<std::string> headers;
     std::unordered_map<std::string, ColumnType> columnTypes;
     std::unordered_map<std::string, size_t> columnIndices;
-    std::unordered_map<std::string, std::vector<unionV>> columnData; // Column-major data
     std::vector<std::string> primaryKeys;
     std::unordered_map<std::string, ForeignKeyInfo> foreignKeys;
     mutable std::unordered_map<std::string, std::vector<int>> int_column_cache;
