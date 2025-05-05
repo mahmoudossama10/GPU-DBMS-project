@@ -20,7 +20,7 @@ public:
           const std::vector<std::string> &originalHeaders,
           const std::unordered_map<std::string, std::vector<unionV>> &columnData,
           const std::unordered_map<std::string, ColumnType> &columnTypes);
-
+    Table();
     ~Table(); // Need destructor to handle memory management for string and datetime pointers
 
     // Accessors

@@ -106,11 +106,10 @@ private:
 class PlanBuilder
 {
 public:
-    explicit PlanBuilder(std::shared_ptr<StorageManager> storage, ExecutionMode mode = ExecutionMode::CPU);
+    explicit PlanBuilder(std::shared_ptr<StorageManager> storage, ExecutionMode mode = ExecutionMode::GPU);
     bool isSelectAll(const std::vector<hsql::Expr *> *selectList);
     bool selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList);
     // Set execution mode (CPU or GPU)
-    void setExecutionMode(ExecutionMode mode);
 
     // Main build method
     std::unique_ptr<ExecutionPlan> build(const hsql::SelectStatement *stmt, const std::string &query);
@@ -126,13 +125,25 @@ public:
         std::shared_ptr<Table> input,
         const std::vector<hsql::Expr *> &select_list);
 
+    std::unique_ptr<ExecutionPlan> buildCPUJoinPlan(
+        std::vector<std::unique_ptr<ExecutionPlan>> inputs,
+        std::string where);
+
     std::shared_ptr<Table> buildGPUOrderByPlan(
         std::shared_ptr<Table> input,
         const std::vector<hsql::OrderDescription *> &order_exprs);
 
+    static std::shared_ptr<Table> output_join_table;
+    static int joinPlansCount;
+
+    static void setExecutionMode(ExecutionMode mode)
+    {
+        PlanBuilder::execution_mode_ = mode;
+    }
+
 private:
     std::shared_ptr<StorageManager> storage_;
-    ExecutionMode execution_mode_;
+    static ExecutionMode execution_mode_;
     std::shared_ptr<GPUManager> gpu_manager_;
 
     // Subquery processing

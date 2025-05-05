@@ -11,6 +11,9 @@
 #include <algorithm>
 #include <regex>
 
+std::shared_ptr<Table> PlanBuilder::output_join_table = nullptr;
+int PlanBuilder::joinPlansCount = 0;
+ExecutionMode PlanBuilder::execution_mode_ = ExecutionMode::CPU;
 namespace
 {
 
@@ -386,21 +389,10 @@ std::shared_ptr<Table> GPUJoinPlanMultipleTable::execute()
 }
 
 PlanBuilder::PlanBuilder(std::shared_ptr<StorageManager> storage, ExecutionMode mode)
-    : storage_(storage), execution_mode_(mode)
+    : storage_(storage)
 {
-    if (mode == ExecutionMode::GPU)
-    {
-        gpu_manager_ = std::make_shared<GPUManager>();
-    }
-}
 
-void PlanBuilder::setExecutionMode(ExecutionMode mode)
-{
-    execution_mode_ = mode;
-    if (mode == ExecutionMode::GPU && !gpu_manager_)
-    {
-        gpu_manager_ = std::make_shared<GPUManager>();
-    }
+    gpu_manager_ = std::make_shared<GPUManager>();
 }
 
 bool PlanBuilder::isSelectAll(const std::vector<hsql::Expr *> *selectList)
@@ -946,13 +938,21 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
         auto where = insertAndBetweenConditions(filter_condition_string);
 
-        if (children.size() > 2)
+        if (execution_mode_ == ExecutionMode::GPU)
         {
-            plan = buildGPUJoinPlanMultipleTable(std::move(children), where);
+            if (children.size() > 2)
+            {
+                plan = buildGPUJoinPlanMultipleTable(std::move(children), where);
+            }
+            else
+            {
+                plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+            }
+            gpu_manager_->joinPlansCount++;
         }
         else
         {
-            plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+            plan = buildCPUJoinPlan(std::move(children), where);
         }
         break;
     }
@@ -970,29 +970,35 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
         }
 
         auto where = insertAndBetweenConditions(filter_condition_string);
-
-        if (children.size() > 2)
+        if (execution_mode_ == ExecutionMode::GPU)
         {
-            plan = buildGPUJoinPlanMultipleTable(std::move(children), where);
+            if (children.size() > 2)
+            {
+                plan = buildGPUJoinPlanMultipleTable(std::move(children), where);
+            }
+            else
+            {
+                plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+            }
+            gpu_manager_->joinPlansCount++;
         }
         else
         {
-            plan = buildGPUJoinPlan(std::move(children[0]), std::move(children[1]), where);
+            plan = buildCPUJoinPlan(std::move(children), where);
         }
-
         break;
     }
-    case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
-    {
-        auto *table_join = dynamic_cast<duckdb::LogicalCrossProduct *>(duckdb_plan.get());
+    // case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
+    // {
+    //     auto *table_join = dynamic_cast<duckdb::LogicalCrossProduct *>(duckdb_plan.get());
 
-        plan = std::make_unique<JoinPlan>(
-            std::move(children[0]), std::move(children[1]),
-            "temp_table" + std::to_string(cnt),
-            "temp_table" + std::to_string(cnt + 50));
+    //     plan = std::make_unique<JoinPlan>(
+    //         std::move(children[0]), std::move(children[1]),
+    //         "temp_table" + std::to_string(cnt),
+    //         "temp_table" + std::to_string(cnt + 50));
 
-        break;
-    }
+    //     break;
+    // }
     case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
     {
         plan = buildPassPlane(std::move(children[0]));
@@ -1147,6 +1153,13 @@ std::shared_ptr<Table> PlanBuilder::buildProjectPlan(
     return plan->execute();
 }
 
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildCPUJoinPlan(
+    std::vector<std::unique_ptr<ExecutionPlan>> inputs,
+    std::string where)
+{
+
+    return std::make_unique<JoinPlan>(std::move(inputs), where);
+}
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildPassPlane(
     std::unique_ptr<ExecutionPlan> input)
 {
@@ -1178,96 +1191,96 @@ std::shared_ptr<Table> PlanBuilder::buildGPUOrderByPlan(
     return result;
 }
 
-std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
-{
-    if (!table)
-    {
-        throw SemanticError("Table reference is null");
-    }
+// std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
+// {
+//     if (!table)
+//     {
+//         throw SemanticError("Table reference is null");
+//     }
 
-    switch (table->type)
-    {
-    case hsql::kTableName:
-    {
-        std::string alias = table->alias ? std::string(table->alias->name) : "";
-        return std::make_unique<TableScanPlan>(storage_, table->name, alias);
-    }
+//     switch (table->type)
+//     {
+//     case hsql::kTableName:
+//     {
+//         std::string alias = table->alias ? std::string(table->alias->name) : "";
+//         return std::make_unique<TableScanPlan>(storage_, table->name, alias);
+//     }
 
-    case hsql::kTableSelect:
-    {
-        // Handle subquery in FROM clause
-        if (!table->select)
-        {
-            throw SemanticError("Subquery in FROM clause is null");
-        }
+//     case hsql::kTableSelect:
+//     {
+//         // Handle subquery in FROM clause
+//         if (!table->select)
+//         {
+//             throw SemanticError("Subquery in FROM clause is null");
+//         }
 
-        // // Process the subquery by recursively calling build
-        // std::unique_ptr<ExecutionPlan> subquery_plan = build(table->select);
+//         // // Process the subquery by recursively calling build
+//         // std::unique_ptr<ExecutionPlan> subquery_plan = build(table->select);
 
-        // // Execute the subquery plan to get the resulting table
-        // std::shared_ptr<Table> subquery_result = subquery_plan->execute();
+//         // // Execute the subquery plan to get the resulting table
+//         // std::shared_ptr<Table> subquery_result = subquery_plan->execute();
 
-        // // Apply alias if specified
-        // std::string alias = table->alias ? std::string(table->alias->name) : "subquery";
-        // subquery_result->setAlias(alias);
+//         // // Apply alias if specified
+//         // std::string alias = table->alias ? std::string(table->alias->name) : "subquery";
+//         // subquery_result->setAlias(alias);
 
-        // // Return a plan that will yield the subquery result
-        // return std::make_unique<SubqueryPlan>(subquery_result);
-    }
+//         // // Return a plan that will yield the subquery result
+//         // return std::make_unique<SubqueryPlan>(subquery_result);
+//     }
 
-    case hsql::kTableCrossProduct:
-    {
-        if (!table->list || table->list->size() < 2)
-        {
-            throw SemanticError("Unsupported cross product specification");
-        }
+//     case hsql::kTableCrossProduct:
+//     {
+//         if (!table->list || table->list->size() < 2)
+//         {
+//             throw SemanticError("Unsupported cross product specification");
+//         }
 
-        auto left = buildScanPlan(table->list->at(0));
-        auto right = buildScanPlan(table->list->at(1));
+//         auto left = buildScanPlan(table->list->at(0));
+//         auto right = buildScanPlan(table->list->at(1));
 
-        std::string left_alias, right_alias;
+//         std::string left_alias, right_alias;
 
-        if (auto *left_scan = dynamic_cast<TableScanPlan *>(left.get()))
-        {
-            left_alias = left_scan->getAlias();
-        }
-        if (auto *right_scan = dynamic_cast<TableScanPlan *>(right.get()))
-        {
-            right_alias = right_scan->getAlias();
-        }
+//         if (auto *left_scan = dynamic_cast<TableScanPlan *>(left.get()))
+//         {
+//             left_alias = left_scan->getAlias();
+//         }
+//         if (auto *right_scan = dynamic_cast<TableScanPlan *>(right.get()))
+//         {
+//             right_alias = right_scan->getAlias();
+//         }
 
-        // Start with joining the first two tables
-        auto join_plan = std::make_unique<JoinPlan>(
-            std::move(left),
-            std::move(right),
-            left_alias,
-            right_alias);
+//         // Start with joining the first two tables
+//         auto join_plan = std::make_unique<JoinPlan>(
+//             std::move(left),
+//             std::move(right),
+//             left_alias,
+//             right_alias);
 
-        // If there are more than 2 tables, join them one by one
-        for (size_t i = 2; i < table->list->size(); i++)
-        {
-            auto next_table = buildScanPlan(table->list->at(i));
-            std::string next_alias;
+//         // If there are more than 2 tables, join them one by one
+//         for (size_t i = 2; i < table->list->size(); i++)
+//         {
+//             auto next_table = buildScanPlan(table->list->at(i));
+//             std::string next_alias;
 
-            if (auto *next_scan = dynamic_cast<TableScanPlan *>(next_table.get()))
-            {
-                next_alias = next_scan->getAlias();
-            }
+//             if (auto *next_scan = dynamic_cast<TableScanPlan *>(next_table.get()))
+//             {
+//                 next_alias = next_scan->getAlias();
+//             }
 
-            join_plan = std::make_unique<JoinPlan>(
-                std::move(join_plan),
-                std::move(next_table),
-                "", // No alias for intermediate result
-                next_alias);
-        }
+//             join_plan = std::make_unique<JoinPlan>(
+//                 std::move(join_plan),
+//                 std::move(next_table),
+//                 "", // No alias for intermediate result
+//                 next_alias);
+//         }
 
-        return join_plan;
-    }
+//         return join_plan;
+//     }
 
-    default:
-        throw SemanticError("Unsupported table reference type");
-    }
-}
+//     default:
+//         throw SemanticError("Unsupported table reference type");
+//     }
+// }
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildFilterPlan(
     std::unique_ptr<ExecutionPlan> input,

@@ -44,6 +44,27 @@ void CommandLineInterface::run()
                     args.push_back(arg);
                 handleLoadCommand(args);
             }
+            else if (input.rfind("set mode ", 0) == 0)
+            {
+                std::string mode = input.substr(9); // "set mode " is 9 characters
+                if (mode == "CPU")
+                {
+                    QueryExecutor::setExecutionMode(ExecutionMode::CPU);
+                    std::cout << "\n=== CPU Info ===" << std::endl;
+                    system("cat /proc/cpuinfo | grep 'model name' | uniq");
+                }
+                else if (mode == "GPU")
+                {
+                    QueryExecutor::setExecutionMode(ExecutionMode::GPU);
+                    std::cout << "\n=== GPU Info ===" << std::endl;
+                    system("nvidia-smi --query-gpu=name --format=csv,noheader");
+                }
+                else
+                {
+                    std::cout << "Invalid mode. Use 'CPU' or 'GPU'.\n";
+                }
+            }
+
             else
             {
                 processQuery(input);
@@ -227,7 +248,7 @@ void CommandLineInterface::displayHelp()
 {
     std::cout << "Available commands:\n"
               << "  load <table_name> <filepath> - Load a CSV file as a table\n"
-              << "  show tables                  - List all loaded tables\n"
+              << "  set mode <GPU>               - List all loaded tables\n"
               << "  <SQL query>                  - Execute a query\n"
               << "  help                         - Show this help\n"
               << "  exit/quit                    - Exit the program\n";

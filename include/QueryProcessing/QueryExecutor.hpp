@@ -48,6 +48,11 @@ public:
     std::shared_ptr<Table> processBatchedQuery(const hsql::SelectStatement *stmt, const std::string &query);
     unionV copyUnionValue(const unionV &value, ColumnType type);
 
+    static void setExecutionMode(ExecutionMode mode)
+    {
+        PlanBuilder::setExecutionMode(mode);
+    }
+
 private:
     std::shared_ptr<StorageManager> storage_;
     std::unique_ptr<PlanBuilder> plan_builder_;

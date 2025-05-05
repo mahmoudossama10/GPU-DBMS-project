@@ -36,6 +36,10 @@ Table::Table(const std::string &name,
     }
 }
 
+Table::Table()
+{
+    tableName = "";
+}
 // Destructor to clean up memory
 Table::~Table()
 {

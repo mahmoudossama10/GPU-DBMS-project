@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <memory>
+#include <cstdlib>
+
 #include "../DataHandling/StorageManager.hpp"
 #include "../QueryProcessing/QueryExecutor.hpp"
 

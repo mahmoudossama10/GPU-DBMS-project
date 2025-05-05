@@ -1,189 +1,583 @@
 #include "../../include/Operations/Join.hpp"
-#include "../../include/Utilities/ErrorHandling.hpp"
+#include "Utilities/ErrorHandling.hpp"
 #include <algorithm>
-
-JoinPlan::JoinPlan(std::unique_ptr<ExecutionPlan> left,
-                   std::unique_ptr<ExecutionPlan> right,
-                   const std::string &left_alias,
-                   const std::string &right_alias)
-    : left_(std::move(left)),
-      right_(std::move(right)),
-      left_alias_(left_alias),
-      right_alias_(right_alias) {}
+#include <cctype>
+#include <sstream>
+#include <iostream>
+#include <cmath>
+#include <iomanip>
+#include <chrono>
+#include <stack>
 
 std::shared_ptr<Table> JoinPlan::execute()
 {
-    auto left_table = left_->execute();
-    auto right_table = right_->execute();
 
-    // Combine headers
-    auto headers = combineHeaders(*left_table, *right_table);
+    std::string sqlStatement = "SELECT * FROM dummy WHERE " + whereString;
 
-    // Create column types map for the result table
-    std::unordered_map<std::string, ColumnType> resultColumnTypes;
+    // Parse the SQL statement
+    hsql::SQLParserResult result;
+    hsql::SQLParser::parse(sqlStatement, &result);
 
-    // Add left table's column types with prefixed headers
-    const auto &leftColumnTypes = left_table->getColumnTypes();
-    for (const auto &[colName, colType] : leftColumnTypes)
+    const auto *stmt = result.getStatement(0);
+
+    auto selectStmt = static_cast<const hsql::SelectStatement *>(stmt);
+    join_condition_ = selectStmt->whereClause;
+    // Execute all input plans to get tables
+    std::vector<std::shared_ptr<Table>> tables;
+    tables.reserve(inputs_.size());
+
+    for (auto &input : inputs_)
     {
-        resultColumnTypes[prefixHeader(colName, left_alias_)] = colType;
+        tables.push_back(input->execute());
     }
 
-    // Add right table's column types with prefixed headers
-    const auto &rightColumnTypes = right_table->getColumnTypes();
-    for (const auto &[colName, colType] : rightColumnTypes)
-    {
-        resultColumnTypes[prefixHeader(colName, right_alias_)] = colType;
-    }
-
-    // Compute product with the new unionV column data structure
-    auto columnData = computeProduct(*left_table, *right_table, resultColumnTypes);
-    return std::make_shared<Table>(
-        "JoinedTable",
-        headers,
-        columnData,
-        resultColumnTypes);
+    // Apply join operation
+    return Join::apply(tables, join_condition_);
 }
 
-std::vector<std::string> JoinPlan::combineHeaders(
-    const Table &left,
-    const Table &right) const
+std::shared_ptr<Table> Join::apply(
+    const std::vector<std::shared_ptr<Table>> &tables,
+    const hsql::Expr *condition)
 {
-    std::vector<std::string> headers;
+    auto startTime = std::chrono::high_resolution_clock::now();
 
-    // Process left headers
-    for (const auto &h : left.getHeaders())
+    if (tables.empty())
     {
-        headers.push_back(prefixHeader(h, left_alias_));
+        throw SemanticError("No tables provided for join operation");
     }
 
-    // Process right headers
-    for (const auto &h : right.getHeaders())
+    if (tables.size() == 1)
     {
-        headers.push_back(prefixHeader(h, right_alias_));
+        // Just one table, no need to join
+        return tables[0];
     }
 
-    return headers;
-}
+    // Combine headers from all tables
+    std::vector<std::string> headers = combineHeaders(tables);
 
-std::unordered_map<std::string, std::vector<unionV>> JoinPlan::computeProduct(
-    const Table &left,
-    const Table &right,
-    std::unordered_map<std::string, ColumnType> &resultColumnTypes) const
-{
-    std::unordered_map<std::string, std::vector<unionV>> result;
+    // Create a map to store column types for the result table
+    std::unordered_map<std::string, ColumnType> columnTypes;
 
-    // Get column-major data from both tables
-    const auto &leftData = left.getData();
-    const auto &leftColumnTypes = left.getColumnTypes();
-    const auto &rightData = right.getData();
-    const auto &rightColumnTypes = right.getColumnTypes();
-
-    // Determine row count by checking size of tables
-    size_t leftRowCount = left.getSize();
-    size_t rightRowCount = right.getSize();
-
-    // If either table is empty, return empty result
-    if (leftRowCount == 0 || rightRowCount == 0)
+    // Populate column types
+    int colOffset = 0;
+    for (const auto &table : tables)
     {
-        return result;
-    }
+        const auto &tableHeaders = table->getHeaders();
+        const auto &tableTypes = table->getColumnTypes();
 
-    // Calculate total rows in result (product of the two tables)
-    size_t totalRows = leftRowCount * rightRowCount;
-
-    // Initialize result columns with the right size
-    for (const auto &h : left.getHeaders())
-    {
-        std::string prefixedHeader = prefixHeader(h, left_alias_);
-        result[prefixedHeader] = std::vector<unionV>(totalRows);
-    }
-
-    for (const auto &h : right.getHeaders())
-    {
-        std::string prefixedHeader = prefixHeader(h, right_alias_);
-        result[prefixedHeader] = std::vector<unionV>(totalRows);
-    }
-
-    // Index for tracking position in result
-    size_t resultIdx = 0;
-
-    // Cartesian product calculation
-    for (size_t l_row = 0; l_row < leftRowCount; ++l_row)
-    {
-        for (size_t r_row = 0; r_row < rightRowCount; ++r_row)
+        for (const auto &header : tableHeaders)
         {
-            // Add all left columns for this row
-            for (const auto &colName : left.getHeaders())
+            std::string resultHeader = headers[colOffset];
+            auto it = tableTypes.find(header);
+            if (it != tableTypes.end())
             {
-                std::string prefixedHeader = prefixHeader(colName, left_alias_);
-                const auto &colData = leftData.at(colName);
-                ColumnType colType = leftColumnTypes.at(colName);
-
-                // Deep copy the union value based on its type
-                switch (colType)
-                {
-                case ColumnType::STRING:
-                    result[prefixedHeader][resultIdx].s = new std::string(*colData[l_row].s);
-                    break;
-                case ColumnType::INTEGER:
-                    result[prefixedHeader][resultIdx].i = colData[l_row].i;
-                    break;
-                case ColumnType::DOUBLE:
-                    result[prefixedHeader][resultIdx].d = colData[l_row].d;
-                    break;
-                case ColumnType::DATETIME:
-                {
-                    dateTime *newDateTime = new dateTime;
-                    *newDateTime = *colData[l_row].t;
-                    result[prefixedHeader][resultIdx].t = newDateTime;
-                    break;
-                }
-                }
+                columnTypes[resultHeader] = it->second;
             }
-
-            // Add all right columns for this row
-            for (const auto &colName : right.getHeaders())
+            else
             {
-                std::string prefixedHeader = prefixHeader(colName, right_alias_);
-                const auto &colData = rightData.at(colName);
-                ColumnType colType = rightColumnTypes.at(colName);
-
-                // Deep copy the union value based on its type
-                switch (colType)
-                {
-                case ColumnType::STRING:
-                    result[prefixedHeader][resultIdx].s = new std::string(*colData[r_row].s);
-                    break;
-                case ColumnType::INTEGER:
-                    result[prefixedHeader][resultIdx].i = colData[r_row].i;
-                    break;
-                case ColumnType::DOUBLE:
-                    result[prefixedHeader][resultIdx].d = colData[r_row].d;
-                    break;
-                case ColumnType::DATETIME:
-                {
-                    dateTime *newDateTime = new dateTime;
-                    *newDateTime = *colData[r_row].t;
-                    result[prefixedHeader][resultIdx].t = newDateTime;
-                    break;
-                }
-                }
+                // Default to string if type not known
+                columnTypes[resultHeader] = ColumnType::STRING;
             }
-
-            resultIdx++;
+            colOffset++;
         }
+    }
+
+    // Create column data structure for the joined table
+    std::unordered_map<std::string, std::vector<unionV>> columnData;
+    for (const auto &header : headers)
+    {
+        columnData[header] = std::vector<unionV>();
+    }
+
+    // Calculate the cartesian product size to reserve memory
+    size_t estimatedSize = 1;
+    for (const auto &table : tables)
+    {
+        estimatedSize *= table->getSize();
+    }
+
+    // Cap the estimate to avoid excessive memory allocation
+    const size_t MAX_RESERVE = 1000000;
+    estimatedSize = std::min(estimatedSize, MAX_RESERVE);
+
+    for (auto &column : columnData)
+    {
+        column.second.reserve(estimatedSize);
+    }
+
+    // Start with first table's row indices
+    std::vector<size_t> currentIndices(tables.size(), 0);
+
+    // Total count of combinations to process
+    size_t totalCombinations = 1;
+    for (const auto &table : tables)
+    {
+        totalCombinations *= table->getSize();
+    }
+
+    std::cout << "Processing " << totalCombinations << " potential combinations..." << std::endl;
+
+    // Process all combinations
+    size_t matchCount = 0;
+    size_t processedCount = 0;
+    const size_t reportInterval = std::max<size_t>(1, totalCombinations / 10);
+
+    while (true)
+    {
+        // Evaluate the join condition for the current combination
+        if (!condition || evaluateJoinCondition(tables, currentIndices, condition))
+        {
+            // This combination satisfies the join condition
+            matchCount++;
+
+            // Add the row to the result
+            int headerIndex = 0;
+            for (size_t t = 0; t < tables.size(); t++)
+            {
+                const auto &table = tables[t];
+                const auto &tableHeaders = table->getHeaders();
+
+                for (const auto &header : tableHeaders)
+                {
+                    // Get the value from the source table
+                    ColumnType type = table->getColumnType(header);
+                    const auto &sourceData = table->getData().at(header);
+                    unionV value = sourceData[currentIndices[t]];
+
+                    // Create a deep copy of the union value if needed
+                    switch (type)
+                    {
+                    case ColumnType::STRING:
+                    {
+                        std::string *newStr = new std::string(*(value.s));
+                        unionV newValue;
+                        newValue.s = newStr;
+                        columnData[headers[headerIndex]].push_back(newValue);
+                    }
+                    break;
+                    case ColumnType::DATETIME:
+                    {
+                        dateTime *newTime = new dateTime(*(value.t));
+                        unionV newValue;
+                        newValue.t = newTime;
+                        columnData[headers[headerIndex]].push_back(newValue);
+                    }
+                    break;
+                    case ColumnType::INTEGER:
+                    case ColumnType::DOUBLE:
+                        // These don't need deep copy
+                        columnData[headers[headerIndex]].push_back(value);
+                        break;
+                    }
+
+                    headerIndex++;
+                }
+            }
+        }
+
+        // Update progress periodically
+        processedCount++;
+        if (processedCount % reportInterval == 0)
+        {
+            std::cout << "Processed " << processedCount << "/" << totalCombinations
+                      << " combinations (" << (processedCount * 100.0 / totalCombinations)
+                      << "%), matches found: " << matchCount << std::endl;
+        }
+
+        // Move to the next combination
+        int tableToIncrement = tables.size() - 1;
+        while (tableToIncrement >= 0)
+        {
+            currentIndices[tableToIncrement]++;
+            if (currentIndices[tableToIncrement] < tables[tableToIncrement]->getSize())
+            {
+                break;
+            }
+
+            // Reset this index and increment the next table's index
+            currentIndices[tableToIncrement] = 0;
+            tableToIncrement--;
+        }
+
+        // If we've processed all combinations, we're done
+        if (tableToIncrement < 0)
+        {
+            break;
+        }
+    }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> processingTime = endTime - startTime;
+
+    std::cout << "Join completed in " << processingTime.count() << " ms, found "
+              << matchCount << " matching rows." << std::endl;
+
+    // Create and return the final joined table
+    return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+}
+
+bool Join::evaluateJoinCondition(
+    const std::vector<std::shared_ptr<Table>> &tables,
+    const std::vector<size_t> &rowIndices,
+    const hsql::Expr *condition)
+{
+    if (!condition)
+    {
+        return true; // No condition means cross join - all combinations match
+    }
+
+    switch (condition->type)
+    {
+    case hsql::kExprOperator:
+        return handleLogicalOperator(tables, rowIndices, condition);
+
+    default:
+        throw SemanticError("Unsupported condition type in join condition: " +
+                            std::to_string(condition->type));
+    }
+}
+
+bool Join::handleLogicalOperator(
+    const std::vector<std::shared_ptr<Table>> &tables,
+    const std::vector<size_t> &rowIndices,
+    const hsql::Expr *expr)
+{
+    switch (expr->opType)
+    {
+    // Logical operators
+    case hsql::kOpAnd:
+        return evaluateJoinCondition(tables, rowIndices, expr->expr) &&
+               evaluateJoinCondition(tables, rowIndices, expr->expr2);
+
+    case hsql::kOpOr:
+        return evaluateJoinCondition(tables, rowIndices, expr->expr) ||
+               evaluateJoinCondition(tables, rowIndices, expr->expr2);
+
+    case hsql::kOpNot:
+        return !evaluateJoinCondition(tables, rowIndices, expr->expr);
+
+    // Comparison operators
+    case hsql::kOpEquals:
+    case hsql::kOpNotEquals:
+    case hsql::kOpLess:
+    case hsql::kOpLessEq:
+    case hsql::kOpGreater:
+    case hsql::kOpGreaterEq:
+        return handleComparison(tables, rowIndices, expr);
+
+    default:
+        throw SemanticError("Unsupported operator in join condition: " +
+                            std::to_string(expr->opType));
+    }
+}
+
+bool Join::handleComparison(
+    const std::vector<std::shared_ptr<Table>> &tables,
+    const std::vector<size_t> &rowIndices,
+    const hsql::Expr *expr)
+{
+    // We need to find which tables and columns are involved
+    int leftTableIdx, rightTableIdx;
+    ColumnType leftType, rightType;
+    unionV leftValue, rightValue;
+
+    // Get values from the appropriate tables
+    leftValue = getExprValue(tables, rowIndices, expr->expr, leftType, leftTableIdx);
+    rightValue = getExprValue(tables, rowIndices, expr->expr2, rightType, rightTableIdx);
+
+    // Compare the values
+    return compareValues(leftValue, leftType, rightValue, rightType, expr->opType);
+}
+
+unionV Join::getExprValue(
+    const std::vector<std::shared_ptr<Table>> &tables,
+    const std::vector<size_t> &rowIndices,
+    const hsql::Expr *expr,
+    ColumnType &outType,
+    int &tableIndex)
+{
+    unionV result;
+    tableIndex = -1;
+
+    if (expr->type == hsql::kExprColumnRef)
+    {
+        // Find which table this column belongs to
+        auto [foundTableIdx, columnName] = findTableAndColumn(tables, expr->name, expr->table);
+
+        if (foundTableIdx == -1 || columnName.empty())
+        {
+            throw SemanticError("Column not found: " +
+                                std::string(expr->table ? expr->table : "") +
+                                (expr->table ? "." : "") + expr->name);
+        }
+
+        tableIndex = foundTableIdx;
+        outType = tables[foundTableIdx]->getColumnType(columnName);
+        const auto &columnData = tables[foundTableIdx]->getData().at(columnName);
+        return columnData[rowIndices[foundTableIdx]];
+    }
+    else if (expr->type == hsql::kExprLiteralInt)
+    {
+        outType = ColumnType::INTEGER;
+        result.i = expr->ival;
+    }
+    else if (expr->type == hsql::kExprLiteralFloat)
+    {
+        outType = ColumnType::DOUBLE;
+        result.d = expr->fval;
+    }
+    else if (expr->type == hsql::kExprLiteralString)
+    {
+        outType = ColumnType::STRING;
+        result.s = new std::string(expr->name);
+    }
+    else
+    {
+        throw SemanticError("Unsupported expression type in join condition: " +
+                            std::to_string(expr->type));
     }
 
     return result;
 }
-
-std::string JoinPlan::prefixHeader(const std::string &header,
-                                   const std::string &alias) const
+std::pair<int, std::string> Join::findTableAndColumn(
+    const std::vector<std::shared_ptr<Table>> &tables,
+    const char *columnName,
+    const char *tableName)
 {
-    if (!alias.empty())
+    if (!columnName)
     {
-        return alias + "." + header;
+        return {-1, ""};
     }
-    return header;
+
+    std::string colName = columnName;
+
+    for (size_t i = 0; i < tables.size(); i++)
+    {
+        const auto &table = tables[i];
+        const auto &headers = table->getHeaders();
+
+        for (const auto &header : headers)
+        {
+            if (tableName && tableName[0] != '\0')
+            {
+                std::string fullColumn = std::string(tableName) + "." + colName;
+
+                if (header == fullColumn ||
+                    (header == colName && table->getAlias() == tableName) ||
+                    (header == colName && table->getName() == tableName))
+                {
+                    return {static_cast<int>(i), header};
+                }
+            }
+            else
+            {
+                if (header == colName)
+                {
+                    return {static_cast<int>(i), header};
+                }
+            }
+        }
+    }
+
+    return {-1, ""};
+}
+
+bool Join::compareValues(
+    const unionV &lhs, ColumnType lhsType,
+    const unionV &rhs, ColumnType rhsType,
+    hsql::OperatorType op)
+{
+    // If types don't match, convert to the more precise type
+    if (lhsType != rhsType)
+    {
+        // Handle type conversion for comparison
+        if ((lhsType == ColumnType::INTEGER && rhsType == ColumnType::DOUBLE) ||
+            (lhsType == ColumnType::DOUBLE && rhsType == ColumnType::INTEGER))
+        {
+            // Convert to double comparison
+            double lhsDouble = (lhsType == ColumnType::INTEGER) ? static_cast<double>(lhs.i) : lhs.d;
+            double rhsDouble = (rhsType == ColumnType::INTEGER) ? static_cast<double>(rhs.i) : rhs.d;
+            return compareDoubles(lhsDouble, rhsDouble, op);
+        }
+        else
+        {
+            // For other mixed types, convert both to strings and compare as strings
+            std::string lhsStr, rhsStr;
+
+            switch (lhsType)
+            {
+            case ColumnType::STRING:
+                lhsStr = *(lhs.s);
+                break;
+            case ColumnType::INTEGER:
+            {
+                std::stringstream ss;
+                ss << lhs.i;
+                lhsStr = ss.str();
+                break;
+            }
+            case ColumnType::DOUBLE:
+            {
+                std::stringstream ss;
+                ss << lhs.d;
+                lhsStr = ss.str();
+                break;
+            }
+            case ColumnType::DATETIME:
+            {
+                std::stringstream ss;
+                const dateTime &dt = *(lhs.t);
+                ss << dt.year << "-";
+                ss << std::setw(2) << std::setfill('0') << dt.month << "-";
+                ss << std::setw(2) << std::setfill('0') << dt.day << " ";
+                ss << std::setw(2) << std::setfill('0') << (int)dt.hour << ":";
+                ss << std::setw(2) << std::setfill('0') << (int)dt.minute << ":";
+                ss << std::setw(2) << std::setfill('0') << (int)dt.second;
+                lhsStr = ss.str();
+                break;
+            }
+            }
+
+            switch (rhsType)
+            {
+            case ColumnType::STRING:
+                rhsStr = *(rhs.s);
+                break;
+            case ColumnType::INTEGER:
+            {
+                std::stringstream ss;
+                ss << rhs.i;
+                rhsStr = ss.str();
+                break;
+            }
+            case ColumnType::DOUBLE:
+            {
+                std::stringstream ss;
+                ss << rhs.d;
+                rhsStr = ss.str();
+                break;
+            }
+            case ColumnType::DATETIME:
+            {
+                std::stringstream ss;
+                const dateTime &dt = *(rhs.t);
+                ss << dt.year << "-";
+                ss << std::setw(2) << std::setfill('0') << dt.month << "-";
+                ss << std::setw(2) << std::setfill('0') << dt.day << " ";
+                ss << std::setw(2) << std::setfill('0') << (int)dt.hour << ":";
+                ss << std::setw(2) << std::setfill('0') << (int)dt.minute << ":";
+                ss << std::setw(2) << std::setfill('0') << (int)dt.second;
+                rhsStr = ss.str();
+                break;
+            }
+            }
+
+            return compareStrings(lhsStr, rhsStr, op);
+        }
+    }
+
+    // Same types, perform type-specific comparison
+    switch (lhsType)
+    {
+    case ColumnType::STRING:
+        return compareStrings(*(lhs.s), *(rhs.s), op);
+
+    case ColumnType::INTEGER:
+        return compareIntegers(lhs.i, rhs.i, op);
+
+    case ColumnType::DOUBLE:
+        return compareDoubles(lhs.d, rhs.d, op);
+
+    default:
+        throw SemanticError("Unsupported data type in join comparison");
+    }
+}
+
+bool Join::compareStrings(const std::string &lhs, const std::string &rhs, hsql::OperatorType op)
+{
+    switch (op)
+    {
+    case hsql::kOpEquals:
+        return lhs == rhs;
+    case hsql::kOpNotEquals:
+        return lhs != rhs;
+    case hsql::kOpLess:
+        return lhs < rhs;
+    case hsql::kOpLessEq:
+        return lhs <= rhs;
+    case hsql::kOpGreater:
+        return lhs > rhs;
+    case hsql::kOpGreaterEq:
+        return lhs >= rhs;
+    default:
+        throw SemanticError("Unsupported string comparison operator in join");
+    }
+}
+
+bool Join::compareIntegers(int64_t lhs, int64_t rhs, hsql::OperatorType op)
+{
+    switch (op)
+    {
+    case hsql::kOpEquals:
+        return lhs == rhs;
+    case hsql::kOpNotEquals:
+        return lhs != rhs;
+    case hsql::kOpLess:
+        return lhs < rhs;
+    case hsql::kOpLessEq:
+        return lhs <= rhs;
+    case hsql::kOpGreater:
+        return lhs > rhs;
+    case hsql::kOpGreaterEq:
+        return lhs >= rhs;
+    default:
+        throw SemanticError("Unsupported integer comparison operator in join");
+    }
+}
+
+bool Join::compareDoubles(double lhs, double rhs, hsql::OperatorType op)
+{
+    switch (op)
+    {
+    case hsql::kOpEquals:
+        return std::abs(lhs - rhs) < 1e-10; // Use epsilon for floating point equality
+    case hsql::kOpNotEquals:
+        return std::abs(lhs - rhs) >= 1e-10;
+    case hsql::kOpLess:
+        return lhs < rhs;
+    case hsql::kOpLessEq:
+        return lhs <= rhs;
+    case hsql::kOpGreater:
+        return lhs > rhs;
+    case hsql::kOpGreaterEq:
+        return lhs >= rhs;
+    default:
+        throw SemanticError("Unsupported double comparison operator in join");
+    }
+}
+
+std::vector<std::string> Join::combineHeaders(const std::vector<std::shared_ptr<Table>> &tables)
+{
+    std::vector<std::string> headers;
+
+    for (const auto &table : tables)
+    {
+        const auto &tableHeaders = table->getHeaders();
+        const std::string &alias = table->getAlias();
+
+        for (const auto &header : tableHeaders)
+        {
+            // Use alias.column notation if alias exists
+            if (!alias.empty())
+            {
+                headers.push_back(alias + "." + header);
+            }
+            else
+            {
+                headers.push_back(header);
+            }
+        }
+    }
+
+    return headers;
 }

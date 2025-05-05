@@ -459,7 +459,6 @@ std::shared_ptr<Table> GPUManager::executeMultipleTableJoin(
     std::vector<int64_t> match_indecies = iterator(h_result, totalBatchSize);
 
 
-        std::vector<std::vector<unionV>> resultData;
 
         auto endProcess = std::chrono::high_resolution_clock::now();
 std::chrono::duration<double, std::milli> processTime = endProcess - startProcess;
@@ -468,88 +467,162 @@ std::cout << "processBatch time: " << processTime.count() << " ms" << std::endl;
 auto startFilter = std::chrono::high_resolution_clock::now();
         // Extract matching rows from the batch
         std::vector<std::vector<int>> selectedCombinations;
+ std::unordered_map<std::string, std::vector<unionV>> columnData;
+        
+ auto headers = combineMultipleHeaders(tables);
+
+
+ if (joinPlansCount == 1){
+
+
+    if (output_join_table){
+
+    
+    // Find all combinations that matched (where batchResults[i] == 1)
+    for (int64_t i = 0; i < match_indecies.size(); i++) {
+        int64_t index = match_indecies[i];
+        int tempHeaderIndex = 0;
+        for (int t = 0; t < tables.size(); t++) {
+            int64_t tableSize = tables[t]->getSize();
+            int64_t mod = index % tableSize;
+            index /= tableSize;
+            auto realHeaders = tables[t]->getHeaders();
+            for(auto header: realHeaders){
+                output_join_table->columnData[headers[tempHeaderIndex]].push_back(tables[t]->columnData[header][mod]);
+                tempHeaderIndex++;
+            }
+        }
+    }
+
+
+}else{
+
+    // Find all combinations that matched (where batchResults[i] == 1)
+    for (int64_t i = 0; i < match_indecies.size(); i++) {
+        int64_t index = match_indecies[i];
+        int tempHeaderIndex = 0;
+        for (int t = 0; t < tables.size(); t++) {
+            int64_t tableSize = tables[t]->getSize();
+            int64_t mod = index % tableSize;
+            index /= tableSize;
+            auto realHeaders = tables[t]->getHeaders();
+            for(auto header: realHeaders){
+                columnData[headers[tempHeaderIndex]].push_back(tables[t]->columnData[header][mod]);
+                tempHeaderIndex++;
+            }
+        }
+    }
+
+
+    auto endFilter = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> filterTime = endFilter - startFilter;
+    std::cout << "Filtering matches time: " << filterTime.count() << " ms" << std::endl;
+
+
+    // Create result table with appropriate column types
+    std::unordered_map<std::string, ColumnType> columnTypes;
+
+
+
+    int colOffset = 0;
+    for (const auto& table : tables) {
+    const auto& tableHeaders = table->getHeaders();
+    const auto& tableTypes = table->getColumnTypes();
+
+    for (const auto& header : tableHeaders) {
+    std::string resultHeader = headers[colOffset];
+    auto it = tableTypes.find(header);
+    if (it != tableTypes.end()) {
+     columnTypes[resultHeader] = it->second;
+    } else {
+     // Default to string if type not known
+     columnTypes[resultHeader] = ColumnType::STRING;
+    }
+    colOffset++;
+    }
+    }
+
+    output_join_table = std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+    
+}
+    joinPlansCount--;
+
+    cudaFree(d_leftResults_join);
+    cudaFree(d_rightResults_join);
+    cudaFree(d_prefixSum);
+    cudaFree(d_result);
+    free(h_result);
+
+    return output_join_table;
+
+ }else{
+
+    // Find all combinations that matched (where batchResults[i] == 1)
+    for (int64_t i = 0; i < match_indecies.size(); i++) {
+        int64_t index = match_indecies[i];
+        int tempHeaderIndex = 0;
+        for (int t = 0; t < tables.size(); t++) {
+            int64_t tableSize = tables[t]->getSize();
+            int64_t mod = index % tableSize;
+            index /= tableSize;
+            auto realHeaders = tables[t]->getHeaders();
+            for(auto header: realHeaders){
+                columnData[headers[tempHeaderIndex]].push_back(tables[t]->columnData[header][mod]);
+                tempHeaderIndex++;
+            }
+        }
+    }
+
+
+    auto endFilter = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> filterTime = endFilter - startFilter;
+    std::cout << "Filtering matches time: " << filterTime.count() << " ms" << std::endl;
+
+
+    // Create result table with appropriate column types
+    std::unordered_map<std::string, ColumnType> columnTypes;
+
+
+
+    int colOffset = 0;
+    for (const auto& table : tables) {
+    const auto& tableHeaders = table->getHeaders();
+    const auto& tableTypes = table->getColumnTypes();
+
+    for (const auto& header : tableHeaders) {
+    std::string resultHeader = headers[colOffset];
+    auto it = tableTypes.find(header);
+    if (it != tableTypes.end()) {
+     columnTypes[resultHeader] = it->second;
+    } else {
+     // Default to string if type not known
+     columnTypes[resultHeader] = ColumnType::STRING;
+    }
+    colOffset++;
+    }
+    }
+    joinPlansCount--;
+
+
+    cudaFree(d_leftResults_join);
+    cudaFree(d_rightResults_join);
+    cudaFree(d_prefixSum);
+    cudaFree(d_result);
+    free(h_result);
+
+    return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+
+    
+
+ }
+
         
 
-        // Find all combinations that matched (where batchResults[i] == 1)
-        for (int64_t i = 0; i < match_indecies.size(); i++) {
-                std::vector<int> combination;
-                int64_t index = match_indecies[i];
-                if(selectedCombinations.size()>=995){
-                    int x=0;
-                }
-                for (int t = 0; t < tables.size(); t++) {
-                    int64_t tableSize = tables[t]->getSize();
-                    int64_t mod = index % tableSize;
-                    combination.insert(combination.end(), mod);
-                    index /= tableSize;
-                }
-                selectedCombinations.push_back(combination);
-            
-        }
-
-
-        auto endFilter = std::chrono::high_resolution_clock::now();
-std::chrono::duration<double, std::milli> filterTime = endFilter - startFilter;
-std::cout << "Filtering matches time: " << filterTime.count() << " ms" << std::endl;
-        // Merge selected rows into result
-
-        auto startMerge = std::chrono::high_resolution_clock::now();
-
-        auto batchData = mergeBatchResults(tables, selectedCombinations);
-        resultData.insert(resultData.end(), batchData.begin(), batchData.end());
-
-        auto endMerge = std::chrono::high_resolution_clock::now();
-std::chrono::duration<double, std::milli> mergeTime = endMerge - startMerge;
-std::cout << "Merging results time: " << mergeTime.count() << " ms" << std::endl;
-
-
- // Create result table with appropriate column types
- std::unordered_map<std::string, std::vector<unionV>> columnData;
- std::unordered_map<std::string, ColumnType> columnTypes;
- 
- auto headers = combineMultipleHeaders(tables);
- 
- // Initialize column data structure
- for (int64_t col = 0; col < headers.size(); col++) {
-     columnData[headers[col]] = std::vector<unionV>(resultData.size());
- }
- 
- // Populate column data
- for (int64_t row = 0; row < resultData.size(); row++) {
-     for (int64_t col = 0; col < headers.size(); col++) {
-         columnData[headers[col]][row] = resultData[row][col];
-     }
- }
- 
- // Determine column types by looking at source tables
- int colOffset = 0;
- for (const auto& table : tables) {
-     const auto& tableHeaders = table->getHeaders();
-     const auto& tableTypes = table->getColumnTypes();
-     
-     for (const auto& header : tableHeaders) {
-         std::string resultHeader = headers[colOffset];
-         auto it = tableTypes.find(header);
-         if (it != tableTypes.end()) {
-             columnTypes[resultHeader] = it->second;
-         } else {
-             // Default to string if type not known
-             columnTypes[resultHeader] = ColumnType::STRING;
-         }
-         colOffset++;
-     }
- }
-
- cudaFree(d_leftResults_join);
- cudaFree(d_rightResults_join);
- cudaFree(d_prefixSum);
- cudaFree(d_result);
- free(h_result);
- return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
 
 
     
 }
+
 
 // Process a specific batch combination across all tables
 void GPUManager::processBatch(
@@ -756,6 +829,9 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
     const std::vector<std::shared_ptr<Table>>& tables,
     const std::vector<std::vector<int>>& selectedIndices) {
     
+
+
+        
     std::vector<std::vector<unionV>> results;
     results.reserve(selectedIndices.size());
 
@@ -1321,67 +1397,191 @@ std::shared_ptr<Table> GPUManager::executeTwoTableJoinWithBinarySearch(
 
     std::vector<int64_t> match_indecies = iterator(h_result, totalCombinations);
 
-    std::vector<std::string> headers;
-    std::unordered_map<std::string, ColumnType> columnTypes;
-    std::unordered_map<std::string, std::vector<unionV>> columnData;
-    
-    // Add left table headers
-    const auto& leftHeaders = leftTable->getHeaders();
-    const auto& leftTypes = leftTable->getColumnTypes();
-    const std::string& leftAlias = leftTable->getAlias();
-    
-    for (const auto& header : leftHeaders) {
-        std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
-        headers.push_back(qualifiedName);
-        columnTypes[qualifiedName] = leftTypes.at(header);
-    }
-    
-    // Add right table headers
-    const auto& rightHeaders = rightTable->getHeaders();
-    const auto& rightTypes = rightTable->getColumnTypes();
-    const std::string& rightAlias = rightTable->getAlias();
-    
-    for (const auto& header : rightHeaders) {
-        std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
-        headers.push_back(qualifiedName);
-        columnTypes[qualifiedName] = rightTypes.at(header);
-    }
-    
-    // Initialize column data structure with correct size
-    for (const auto& header : headers) {
-        columnData[header] = std::vector<unionV>(match_indecies.size());
-    }
-    
-    // Populate result table using the matching indices
-    for (int resultIdx = 0; resultIdx < match_indecies.size(); resultIdx++) {
-        int leftIdx = match_indecies[resultIdx] / rightSize;
-        int rightIdx = match_indecies[resultIdx] % rightSize;
+
+ 
+    if(joinPlansCount == 1 ){
+        if (output_join_table) {
         
-        // Add data from left table
-        auto leftRow = leftTable->getRow(leftIdx);
-        auto rightRow = rightTable->getRow(rightIdx);
+
+            std::vector<std::string> headers;
+            std::unordered_map<std::string, ColumnType> columnTypes;
+            
+            // Add left table headers
+            const auto& leftHeaders = leftTable->getHeaders();
+            const auto& leftTypes = leftTable->getColumnTypes();
+            const std::string& leftAlias = leftTable->getAlias();
+            
+            for (const auto& header : leftHeaders) {
+                std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
+                headers.push_back(qualifiedName);
+                columnTypes[qualifiedName] = leftTypes.at(header);
+            }
+    
+            // Add right table headers
+            const auto& rightHeaders = rightTable->getHeaders();
+            const auto& rightTypes = rightTable->getColumnTypes();
+            const std::string& rightAlias = rightTable->getAlias();
+    
+            for (const auto& header : rightHeaders) {
+                std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
+                headers.push_back(qualifiedName);
+                columnTypes[qualifiedName] = rightTypes.at(header);
+            }
+    
+    
+    
+            // Populate result table using the matching indices
+            for (int resultIdx = 0; resultIdx < match_indecies.size(); resultIdx++) {
+                int leftIdx = match_indecies[resultIdx] / rightSize;
+                int rightIdx = match_indecies[resultIdx] % rightSize;
+    
+                // Add data from left table
+                auto leftRow = leftTable->getRow(leftIdx);
+                auto rightRow = rightTable->getRow(rightIdx);
+    
+                // Add data from left table
+                for (int64_t colIdx = 0; colIdx < leftHeaders.size(); ++colIdx) {
+                    const auto& header = leftHeaders[colIdx];
+                    std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
+                    output_join_table->columnData[qualifiedName].push_back(leftRow[colIdx]);
+                }
+    
+                // Add data from right table
+                for (int64_t colIdx = 0; colIdx < rightHeaders.size(); ++colIdx) {
+                    const auto& header = rightHeaders[colIdx];
+                    std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
+                    output_join_table->columnData[qualifiedName].push_back(rightRow[colIdx]);
+                }
+            }
+    
+            
+        } else {
+            
+            std::vector<std::string> headers;
+            std::unordered_map<std::string, ColumnType> columnTypes;
+            std::unordered_map<std::string, std::vector<unionV>> columnData;
+            
+            // Add left table headers
+            const auto& leftHeaders = leftTable->getHeaders();
+            const auto& leftTypes = leftTable->getColumnTypes();
+            const std::string& leftAlias = leftTable->getAlias();
+            
+            for (const auto& header : leftHeaders) {
+                std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
+                headers.push_back(qualifiedName);
+                columnTypes[qualifiedName] = leftTypes.at(header);
+            }
+    
+            // Add right table headers
+            const auto& rightHeaders = rightTable->getHeaders();
+            const auto& rightTypes = rightTable->getColumnTypes();
+            const std::string& rightAlias = rightTable->getAlias();
+    
+            for (const auto& header : rightHeaders) {
+                std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
+                headers.push_back(qualifiedName);
+                columnTypes[qualifiedName] = rightTypes.at(header);
+            }
+    
+            // Initialize column data structure with correct size
+            for (const auto& header : headers) {
+                columnData[header] = std::vector<unionV>(match_indecies.size());
+            }
+    
+            // Populate result table using the matching indices
+            for (int resultIdx = 0; resultIdx < match_indecies.size(); resultIdx++) {
+                int leftIdx = match_indecies[resultIdx] / rightSize;
+                int rightIdx = match_indecies[resultIdx] % rightSize;
+    
+                // Add data from left table
+                auto leftRow = leftTable->getRow(leftIdx);
+                auto rightRow = rightTable->getRow(rightIdx);
+    
+                // Add data from left table
+                for (int64_t colIdx = 0; colIdx < leftHeaders.size(); ++colIdx) {
+                    const auto& header = leftHeaders[colIdx];
+                    std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
+                    columnData[qualifiedName][resultIdx] = leftRow[colIdx];
+                }
+    
+                // Add data from right table
+                for (int64_t colIdx = 0; colIdx < rightHeaders.size(); ++colIdx) {
+                    const auto& header = rightHeaders[colIdx];
+                    std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
+                    columnData[qualifiedName][resultIdx] = rightRow[colIdx];
+                }
+            }
+            output_join_table = std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+    
+        }
+        joinPlansCount--;
+    return output_join_table;
+    }else{
+        std::vector<std::string> headers;
+        std::unordered_map<std::string, ColumnType> columnTypes;
+        std::unordered_map<std::string, std::vector<unionV>> columnData;
         
-        // Add data from left table
-        for (int64_t colIdx = 0; colIdx < leftHeaders.size(); ++colIdx) {
-            const auto& header = leftHeaders[colIdx];
+        // Add left table headers
+        const auto& leftHeaders = leftTable->getHeaders();
+        const auto& leftTypes = leftTable->getColumnTypes();
+        const std::string& leftAlias = leftTable->getAlias();
+        
+        for (const auto& header : leftHeaders) {
             std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
-            columnData[qualifiedName][resultIdx] = leftRow[colIdx];
+            headers.push_back(qualifiedName);
+            columnTypes[qualifiedName] = leftTypes.at(header);
         }
-        
-        // Add data from right table
-        for (int64_t colIdx = 0; colIdx < rightHeaders.size(); ++colIdx) {
-            const auto& header = rightHeaders[colIdx];
+
+        // Add right table headers
+        const auto& rightHeaders = rightTable->getHeaders();
+        const auto& rightTypes = rightTable->getColumnTypes();
+        const std::string& rightAlias = rightTable->getAlias();
+
+        for (const auto& header : rightHeaders) {
             std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
-            columnData[qualifiedName][resultIdx] = rightRow[colIdx];
+            headers.push_back(qualifiedName);
+            columnTypes[qualifiedName] = rightTypes.at(header);
         }
-    }
+
+        // Initialize column data structure with correct size
+        for (const auto& header : headers) {
+            columnData[header] = std::vector<unionV>(match_indecies.size());
+        }
+
+        // Populate result table using the matching indices
+        for (int resultIdx = 0; resultIdx < match_indecies.size(); resultIdx++) {
+            int leftIdx = match_indecies[resultIdx] / rightSize;
+            int rightIdx = match_indecies[resultIdx] % rightSize;
+
+            // Add data from left table
+            auto leftRow = leftTable->getRow(leftIdx);
+            auto rightRow = rightTable->getRow(rightIdx);
+
+            // Add data from left table
+            for (int64_t colIdx = 0; colIdx < leftHeaders.size(); ++colIdx) {
+                const auto& header = leftHeaders[colIdx];
+                std::string qualifiedName = leftAlias.empty() ? header : leftAlias + "." + header;
+                columnData[qualifiedName][resultIdx] = leftRow[colIdx];
+            }
+
+            // Add data from right table
+            for (int64_t colIdx = 0; colIdx < rightHeaders.size(); ++colIdx) {
+                const auto& header = rightHeaders[colIdx];
+                std::string qualifiedName = rightAlias.empty() ? header : rightAlias + "." + header;
+                columnData[qualifiedName][resultIdx] = rightRow[colIdx];
+            }
+        }
+        joinPlansCount--;
+
+    return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+
+}
     cudaFree(d_leftResults_join);
     cudaFree(d_rightResults_join);
     cudaFree(d_prefixSum);
     cudaFree(d_result);
     free(h_result);
     // Create and return the joined table
-    return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
 }
 
 

@@ -477,17 +477,7 @@ std::shared_ptr<Table> QueryExecutor::processBatchedQuery(const hsql::SelectStat
                 {
                     // Execute the query on this batch
                     std::shared_ptr<Table> batchResult = plan_builder_->build(batchStmt, batchQuery)->execute();
-
-                    // Combine with previous results
-                    if (finalResult == nullptr)
-                    {
-                        finalResult = batchResult;
-                    }
-                    else
-                    {
-                        mergeResults(finalResult, batchResult);
-                    }
-                    batchResult.reset();
+                    finalResult = batchResult;
                 }
             }
         }
@@ -540,16 +530,7 @@ std::shared_ptr<Table> QueryExecutor::processBatchedQuery(const hsql::SelectStat
                 {
                     // Execute the query on this batch combination
                     std::shared_ptr<Table> batchResult = plan_builder_->build(batchStmt, batchQuery)->execute();
-
-                    // Combine with previous results
-                    if (finalResult == nullptr)
-                    {
-                        finalResult = batchResult;
-                    }
-                    else
-                    {
-                        mergeResults(finalResult, batchResult);
-                    }
+                    finalResult = batchResult;
                 }
             }
         }

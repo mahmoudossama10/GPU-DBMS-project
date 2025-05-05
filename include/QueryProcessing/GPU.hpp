@@ -52,7 +52,7 @@ public:
     void evaluateTwoTableJoinCondition(
         const std::shared_ptr<Table> &leftTable,
         const std::shared_ptr<Table> &rightTable,
-        hsql::Expr *condition,int direction);
+        hsql::Expr *condition, int direction);
 
     std::shared_ptr<Table> executeMultipleTableJoin(
         const std::vector<std::shared_ptr<Table>> &tables,
@@ -67,6 +67,9 @@ public:
         bool is_ascending;
         ColumnType type;
     };
+
+    std::shared_ptr<Table> output_join_table;
+    int joinPlansCount = 0;
 
 private:
     // Flag indicating if GPU is available
