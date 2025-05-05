@@ -49,10 +49,10 @@ public:
         const std::shared_ptr<Table> &rightTable,
         hsql::Expr *joinCondition);
 
-    std::vector<int64_t> evaluateTwoTableJoinCondition(
+    void evaluateTwoTableJoinCondition(
         const std::shared_ptr<Table> &leftTable,
         const std::shared_ptr<Table> &rightTable,
-        hsql::Expr *condition);
+        hsql::Expr *condition,int direction);
 
     std::shared_ptr<Table> executeMultipleTableJoin(
         const std::vector<std::shared_ptr<Table>> &tables,
@@ -84,14 +84,14 @@ private:
         int tableIndex);
 
     // Process a specific batch
-    std::vector<int64_t> processBatch(
+    void processBatch(
         const std::vector<std::shared_ptr<Table>> &tables,
-        const hsql::Expr *conditions);
+        const hsql::Expr *conditions, int direction);
 
     // Evaluate condition on batch
-    std::vector<int64_t> evaluateConditionOnBatch(
+    void evaluateConditionOnBatch(
         const std::vector<std::shared_ptr<Table>> &tables,
-        const hsql::Expr *condition);
+        const hsql::Expr *condition, int direction);
 
     // Combine headers from multiple tables
     std::vector<std::string> combineMultipleHeaders(
