@@ -11,9 +11,15 @@
 
 std::shared_ptr<Table> JoinPlan::execute()
 {
-
-    std::string sqlStatement = "SELECT * FROM dummy WHERE " + whereString;
-
+    std::string sqlStatement = "";
+    if (whereString != "")
+    {
+        sqlStatement = "SELECT * FROM dummy WHERE " + whereString;
+    }
+    else
+    {
+        sqlStatement = "SELECT * FROM dummy ";
+    }
     // Parse the SQL statement
     hsql::SQLParserResult result;
     hsql::SQLParser::parse(sqlStatement, &result);
@@ -130,47 +136,199 @@ std::shared_ptr<Table> Join::apply(
             // This combination satisfies the join condition
             matchCount++;
 
-            // Add the row to the result
-            int headerIndex = 0;
-            for (size_t t = 0; t < tables.size(); t++)
+            if (PlanBuilder::joinPlansCount == 1)
             {
-                const auto &table = tables[t];
-                const auto &tableHeaders = table->getHeaders();
-
-                for (const auto &header : tableHeaders)
+                if (PlanBuilder::output_join_table)
                 {
-                    // Get the value from the source table
-                    ColumnType type = table->getColumnType(header);
-                    const auto &sourceData = table->getData().at(header);
-                    unionV value = sourceData[currentIndices[t]];
+                    // Add rows to existing output table
+                    int headerIndex = 0;
+                    for (size_t t = 0; t < tables.size(); t++)
+                    {
+                        const auto &table = tables[t];
+                        const auto &tableHeaders = table->getHeaders();
 
-                    // Create a deep copy of the union value if needed
-                    switch (type)
-                    {
-                    case ColumnType::STRING:
-                    {
-                        std::string *newStr = new std::string(*(value.s));
-                        unionV newValue;
-                        newValue.s = newStr;
-                        columnData[headers[headerIndex]].push_back(newValue);
+                        for (const auto &header : tableHeaders)
+                        {
+                            // Get the value from the source table
+                            ColumnType type = table->getColumnType(header);
+                            const auto &sourceData = table->getData().at(header);
+                            unionV value = sourceData[currentIndices[t]];
+
+                            // Create a deep copy of the union value if needed
+                            switch (type)
+                            {
+                            case ColumnType::STRING:
+                            {
+                                std::string *newStr = new std::string(*(value.s));
+                                unionV newValue;
+                                newValue.s = newStr;
+                                PlanBuilder::output_join_table->columnData[headers[headerIndex]].push_back(newValue);
+                            }
+                            break;
+                            case ColumnType::DATETIME:
+                            {
+                                dateTime *newTime = new dateTime(*(value.t));
+                                unionV newValue;
+                                newValue.t = newTime;
+                                PlanBuilder::output_join_table->columnData[headers[headerIndex]].push_back(newValue);
+                            }
+                            break;
+                            case ColumnType::INTEGER:
+                            case ColumnType::DOUBLE:
+                                // These don't need deep copy
+                                PlanBuilder::output_join_table->columnData[headers[headerIndex]].push_back(value);
+                                break;
+                            }
+
+                            headerIndex++;
+                        }
                     }
-                    break;
-                    case ColumnType::DATETIME:
+                }
+                else
+                {
+                    // Add rows to local columnData map
+                    int headerIndex = 0;
+                    for (size_t t = 0; t < tables.size(); t++)
                     {
-                        dateTime *newTime = new dateTime(*(value.t));
-                        unionV newValue;
-                        newValue.t = newTime;
-                        columnData[headers[headerIndex]].push_back(newValue);
+                        const auto &table = tables[t];
+                        const auto &tableHeaders = table->getHeaders();
+
+                        for (const auto &header : tableHeaders)
+                        {
+                            // Get the value from the source table
+                            ColumnType type = table->getColumnType(header);
+                            const auto &sourceData = table->getData().at(header);
+                            unionV value = sourceData[currentIndices[t]];
+
+                            // Create a deep copy of the union value if needed
+                            switch (type)
+                            {
+                            case ColumnType::STRING:
+                            {
+                                std::string *newStr = new std::string(*(value.s));
+                                unionV newValue;
+                                newValue.s = newStr;
+                                columnData[headers[headerIndex]].push_back(newValue);
+                            }
+                            break;
+                            case ColumnType::DATETIME:
+                            {
+                                dateTime *newTime = new dateTime(*(value.t));
+                                unionV newValue;
+                                newValue.t = newTime;
+                                columnData[headers[headerIndex]].push_back(newValue);
+                            }
+                            break;
+                            case ColumnType::INTEGER:
+                            case ColumnType::DOUBLE:
+                                // These don't need deep copy
+                                columnData[headers[headerIndex]].push_back(value);
+                                break;
+                            }
+
+                            headerIndex++;
+                        }
                     }
-                    break;
-                    case ColumnType::INTEGER:
-                    case ColumnType::DOUBLE:
-                        // These don't need deep copy
-                        columnData[headers[headerIndex]].push_back(value);
+
+                    // Create result table with appropriate column types
+                    std::unordered_map<std::string, ColumnType> columnTypes;
+
+                    int colOffset = 0;
+                    for (const auto &table : tables)
+                    {
+                        const auto &tableHeaders = table->getHeaders();
+                        const auto &tableTypes = table->getColumnTypes();
+
+                        for (const auto &header : tableHeaders)
+                        {
+                            std::string resultHeader = headers[colOffset];
+                            auto it = tableTypes.find(header);
+                            if (it != tableTypes.end())
+                            {
+                                columnTypes[resultHeader] = it->second;
+                            }
+                            else
+                            {
+                                // Default to string if type not known
+                                columnTypes[resultHeader] = ColumnType::STRING;
+                            }
+                            colOffset++;
+                        }
+                    }
+
+                    PlanBuilder::output_join_table = std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+                }
+            }
+            else
+            {
+                // Add rows to local columnData map
+                int headerIndex = 0;
+                for (size_t t = 0; t < tables.size(); t++)
+                {
+                    const auto &table = tables[t];
+                    const auto &tableHeaders = table->getHeaders();
+
+                    for (const auto &header : tableHeaders)
+                    {
+                        // Get the value from the source table
+                        ColumnType type = table->getColumnType(header);
+                        const auto &sourceData = table->getData().at(header);
+                        unionV value = sourceData[currentIndices[t]];
+
+                        // Create a deep copy of the union value if needed
+                        switch (type)
+                        {
+                        case ColumnType::STRING:
+                        {
+                            std::string *newStr = new std::string(*(value.s));
+                            unionV newValue;
+                            newValue.s = newStr;
+                            columnData[headers[headerIndex]].push_back(newValue);
+                        }
                         break;
-                    }
+                        case ColumnType::DATETIME:
+                        {
+                            dateTime *newTime = new dateTime(*(value.t));
+                            unionV newValue;
+                            newValue.t = newTime;
+                            columnData[headers[headerIndex]].push_back(newValue);
+                        }
+                        break;
+                        case ColumnType::INTEGER:
+                        case ColumnType::DOUBLE:
+                            // These don't need deep copy
+                            columnData[headers[headerIndex]].push_back(value);
+                            break;
+                        }
 
-                    headerIndex++;
+                        headerIndex++;
+                    }
+                }
+
+                // Create result table with appropriate column types
+                std::unordered_map<std::string, ColumnType> columnTypes;
+
+                int colOffset = 0;
+                for (const auto &table : tables)
+                {
+                    const auto &tableHeaders = table->getHeaders();
+                    const auto &tableTypes = table->getColumnTypes();
+
+                    for (const auto &header : tableHeaders)
+                    {
+                        std::string resultHeader = headers[colOffset];
+                        auto it = tableTypes.find(header);
+                        if (it != tableTypes.end())
+                        {
+                            columnTypes[resultHeader] = it->second;
+                        }
+                        else
+                        {
+                            // Default to string if type not known
+                            columnTypes[resultHeader] = ColumnType::STRING;
+                        }
+                        colOffset++;
+                    }
                 }
             }
         }
@@ -213,7 +371,24 @@ std::shared_ptr<Table> Join::apply(
               << matchCount << " matching rows." << std::endl;
 
     // Create and return the final joined table
-    return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+
+    PlanBuilder::joinPlansCount--;
+
+    if (PlanBuilder::joinPlansCount == 0)
+    {
+        if (PlanBuilder::output_join_table)
+        {
+            return PlanBuilder::output_join_table;
+        }
+        else
+        {
+            return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+        }
+    }
+    else
+    {
+        return std::make_shared<Table>("joined_result", headers, columnData, columnTypes);
+    }
 }
 
 bool Join::evaluateJoinCondition(

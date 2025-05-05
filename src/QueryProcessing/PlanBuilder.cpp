@@ -952,6 +952,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
         }
         else
         {
+            PlanBuilder::joinPlansCount++;
             plan = buildCPUJoinPlan(std::move(children), where);
         }
         break;
@@ -984,21 +985,19 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
         }
         else
         {
+            PlanBuilder::joinPlansCount++;
             plan = buildCPUJoinPlan(std::move(children), where);
         }
         break;
     }
-    // case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
-    // {
-    //     auto *table_join = dynamic_cast<duckdb::LogicalCrossProduct *>(duckdb_plan.get());
+    case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
+    {
+        auto *table_join = dynamic_cast<duckdb::LogicalCrossProduct *>(duckdb_plan.get());
 
-    //     plan = std::make_unique<JoinPlan>(
-    //         std::move(children[0]), std::move(children[1]),
-    //         "temp_table" + std::to_string(cnt),
-    //         "temp_table" + std::to_string(cnt + 50));
+        plan = buildCPUJoinPlan(std::move(children), "");
 
-    //     break;
-    // }
+        break;
+    }
     case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
     {
         plan = buildPassPlane(std::move(children[0]));

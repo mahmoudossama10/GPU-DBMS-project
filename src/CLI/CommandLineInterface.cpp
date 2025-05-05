@@ -211,6 +211,7 @@ void CommandLineInterface::processQuery(const std::string &query)
 
             std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
             cleanupBatchTables();
+            result.reset();
         }
         else
         {
