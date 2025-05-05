@@ -7,9 +7,9 @@
 #include <vector>
 #include <string>
 
-class AggregatorPlan : public ExecutionPlan {
+class GPUAggregatorPlan : public ExecutionPlan {
 public:
-    AggregatorPlan(std::unique_ptr<ExecutionPlan> input, const std::vector<hsql::Expr*>& select_list);
+    GPUAggregatorPlan(std::unique_ptr<ExecutionPlan> input, const std::vector<hsql::Expr*>& select_list);
     std::shared_ptr<Table> execute() override;
 
 private:
@@ -18,13 +18,11 @@ private:
         std::string column_name;
         std::string alias;
         bool is_distinct;
+        size_t column_index;
     };
 
     std::vector<AggregateOp> parseAggregates(const std::vector<hsql::Expr*>& select_list, const Table& table);
-    std::shared_ptr<Table> aggregateTable(const Table& table, const std::vector<AggregateOp>& aggregates);
-
-    // Helper to convert unionV to string
-    std::string unionValueToString(const unionV& value, ColumnType type);
+    std::shared_ptr<Table> aggregateTableGPU(const Table& table, const std::vector<AggregateOp>& aggregates);
 
     std::unique_ptr<ExecutionPlan> input_;
     std::vector<hsql::Expr*> select_list_;

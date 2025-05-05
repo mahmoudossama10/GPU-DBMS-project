@@ -19,6 +19,8 @@ SQLQueryProcessor/
 │   │   ├── Join.hpp
 │   │   ├── Filter.hpp
 │   │   ├── OrderBy.hpp
+│   │   ├── GPUAggregator.hpp
+│   │   ├── GPUOrderBy.cuh
 │   │   └── Aggregator.hpp
 │   ├── QueryProcessing/
 │   │   ├── QueryExecutor.hpp
@@ -45,10 +47,13 @@ SQLQueryProcessor/
     │   ├── Join.cpp
     │   ├── Filter.cpp
     │   ├── OrderBy.cpp
+    |   ├── GPUOrderBy.cpp
+    |   ├── GPUAggregator.cpp
     │   └── Aggregator.cpp
     ├── QueryProcessing/
     │   ├── QueryExecutor.cpp
     │   ├── ASTProcessor.cpp
+    |   ├── GPU.cu
     │   ├── SubqueryHandler.cpp
     │   └── PlanBuilder.cpp
     ├── CLI/

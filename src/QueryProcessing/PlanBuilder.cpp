@@ -2,6 +2,7 @@
 #include "../../include/Operations/Filter.hpp"
 #include "../../include/Operations/Project.hpp"
 #include "../../include/Operations/Aggregator.hpp"
+#include "../../include/Operations/GPUAggregator.cuh"
 #include "../../include/Operations/OrderBy.hpp"
 #include "../../include/Operations/GPUOrderBy.cuh"
 #include "../../include/Operations/Join.hpp"
@@ -340,22 +341,22 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     // If using GPU and there are no complex subqueries, use GPU path
     if (execution_mode_ == ExecutionMode::GPU && !has_subquery_in_from)
     {
-
         std::unique_ptr<ExecutionPlan> plan;
 
         if (stmt->fromTable->type == hsql::kTableName)
         {
             // Single table only — safe to scan directly
-            auto plan = buildScanPlan(stmt->fromTable);
+            plan = buildScanPlan(stmt->fromTable);
             if (processed_where)
             {
                 plan = buildFilterPlan(std::move(plan), processed_where);
             }
 
-            // if (hasAggregates(*(stmt->selectList)))
-            // {
-            //     plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
-            // }
+            // Handle aggregates using GPUAggregatorPlan if present
+            if (hasAggregates(*(stmt->selectList)))
+            {
+                plan = std::make_unique<GPUAggregatorPlan>(std::move(plan), *(stmt->selectList));
+            }
 
             // Only create ProjectPlan if needed
             if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList)))
@@ -372,12 +373,13 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
         }
         else
         {
-            auto plan = buildGPUScanPlan(stmt->fromTable, processed_where);
+            plan = buildGPUScanPlan(stmt->fromTable, processed_where);
 
-            // if (hasAggregates(*(stmt->selectList)))
-            // {
-            //     plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
-            // }
+            // Handle aggregates using GPUAggregatorPlan if present
+            if (hasAggregates(*(stmt->selectList)))
+            {
+                plan = std::make_unique<GPUAggregatorPlan>(std::move(plan), *(stmt->selectList));
+            }
 
             // Only create ProjectPlan if needed
             if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList)))
@@ -385,10 +387,6 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
                 plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
             }
 
-            // if (stmt->order && !stmt->order->empty())
-            // {
-            //     plan = buildOrderByPlan(std::move(plan), *stmt->order);
-            // }
             return plan;
         }
     }
@@ -402,20 +400,16 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
             plan = buildFilterPlan(std::move(plan), processed_where);
         }
 
-        // if (hasAggregates(*(stmt->selectList)))
-        // {
-        //     plan = buildAggregatePlan(std::move(plan), *(stmt->selectList));
-        // }
+        // Handle aggregates using AggregatorPlan if present
+        if (hasAggregates(*(stmt->selectList)))
+        {
+            plan = std::make_unique<AggregatorPlan>(std::move(plan), *(stmt->selectList));
+        }
 
         if (!isSelectAll(stmt->selectList) && selectListNeedsProjection(*(stmt->selectList)))
         {
             plan = buildProjectPlan(std::move(plan), *(stmt->selectList));
         }
-
-        // if (stmt->order && !stmt->order->empty())
-        // {
-        //     plan = buildOrderByPlan(std::move(plan), *stmt->order);
-        // }
 
         if (stmt->order && !stmt->order->empty())
         {

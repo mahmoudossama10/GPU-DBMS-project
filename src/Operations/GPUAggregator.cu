@@ -1,354 +1,437 @@
-// #include "../../include/Operations/GPUAggregator.hpp"
-// #include <cuda_runtime.h>
-// #include <vector>
-// #include <climits>
-// #include <stdexcept>
-// #include <cstring>
-// #include <algorithm>
-// #include <limits>
-// #include <numeric>
-
-// // ------------------ Kernel ------------------
-
-
-// struct IntAggregatesDevice {
-
-//     long long sum;
-
-//     int count;
-
-//     int min;
-
-//     int max;
-
-// };
-
-
-// __global__
-
-// void multiAggregate_kernel(const int* data, int N, IntAggregatesDevice* result) {
-
-//     extern __shared__ int buf[]; // blockDim.x ints for reductions
-
-//     int tid = threadIdx.x;
-
-//     int globalIdx = blockIdx.x * blockDim.x + tid;
-
-
-//     // Local partials
-
-//     long long tsum = 0;
-
-//     int tmin = INT_MAX, tmax = INT_MIN, tcount = 0;
-
-
-//     // Stride through the array (to support any N)
-
-//     for (int i = globalIdx; i < N; i += blockDim.x * gridDim.x) {
-
-//         int val = data[i];
-
-//         tsum += val;
-
-//         tmin = min(tmin, val);
-
-//         tmax = max(tmax, val);
-
-//         ++tcount;
-
-//     }
-
-
-//     // Reduce within the block
-
-//     // use shared memory for sum/min/max/count
-
-//     __shared__ long long s_sum[256];
-
-//     __shared__ int s_min[256], s_max[256], s_count[256];
-
-//     s_sum[tid] = tsum;
-
-//     s_min[tid] = tmin;
-
-//     s_max[tid] = tmax;
-
-//     s_count[tid] = tcount;
-
-
-//     __syncthreads();
-
-
-//     for (int s = blockDim.x/2; s>0; s>>=1) {
-
-//         if (tid < s) {
-
-//             s_sum[tid] += s_sum[tid+s];
-
-//             s_min[tid] = min(s_min[tid], s_min[tid+s]);
-
-//             s_max[tid] = max(s_max[tid], s_max[tid+s]);
-
-//             s_count[tid] += s_count[tid+s];
-
-//         }
-
-//         __syncthreads();
-
-//     }
-
-
-//     // Block leader atomically adds results to global result
-
-//     if (tid == 0) {
-
-//         atomicAdd((unsigned long long*)&(result->sum), (unsigned long long)s_sum[0]);
-
-//         atomicMin(&(result->min), s_min[0]);
-
-//         atomicMax(&(result->max), s_max[0]);
-
-//         atomicAdd(&(result->count), s_count[0]);
-
-//     }
-
-// }
-
-
-// // Host wrapper: Batched aggregation
-
-// GPUAggregator::IntAggregates GPUAggregator::multiAggregateInt(const std::vector<int>& col) {
-
-//     IntAggregates out;
-
-//     if(col.empty()) return out;
-
-
-//     int N = col.size();
-
-//     int* d_col = nullptr;
-
-//     IntAggregatesDevice* d_result = nullptr;
-
-//     IntAggregatesDevice h_result;
-
-
-//     h_result.sum = 0;
-
-//     h_result.count = 0;
-
-//     h_result.min = INT_MAX;
-
-//     h_result.max = INT_MIN;
-
-
-//     cudaMalloc(&d_col, N*sizeof(int));
-
-//     cudaMemcpy(d_col, col.data(), N*sizeof(int), cudaMemcpyHostToDevice);
-
-//     cudaMalloc(&d_result, sizeof(IntAggregatesDevice));
-
-//     cudaMemcpy(d_result, &h_result, sizeof(IntAggregatesDevice), cudaMemcpyHostToDevice);
-
-
-//     int threads = 256;
-
-//     int blocks = (N + threads - 1) / threads;
-
-//     if (blocks > 1024) blocks = 1024;
-
-
-//     multiAggregate_kernel<<<blocks, threads, 0>>>(d_col, N, d_result);
-
-//     cudaDeviceSynchronize();
-
-
-//     cudaMemcpy(&h_result, d_result, sizeof(IntAggregatesDevice), cudaMemcpyDeviceToHost);
-
-
-//     cudaFree(d_col);
-
-//     cudaFree(d_result);
-
-
-//     out.sum = h_result.sum;
-
-//     out.count = h_result.count;
-
-//     out.min = h_result.min;
-
-//     out.max = h_result.max;
-
-//     out.avg = (h_result.count > 0) ? double(h_result.sum) / h_result.count : 0.0;
-
-
-//     return out;
-
-// }
-
-// // CUDA error helper for debugging
-// static inline void checkCuda(cudaError_t result, char const *const func, const char *const file, int const line) {
-//     if (result != cudaSuccess) {
-//         fprintf(stderr, "CUDA error at %s:%d code=%d(%s) \"%s\" \n",
-//                 file, line, static_cast<unsigned int>(result), cudaGetErrorString(result), func);
-//         exit(EXIT_FAILURE);
-//     }
-// }
-// #define checkCudaErrors(val) checkCuda((val), #val, __FILE__, __LINE__)
-
-// // -------------------------------------------
-// // REDUCTION KERNELS
-// // opType: 0=SUM, 1=MIN, 2=MAX
-// // Device version
-
-// __device__ int reduce_op_device(int a, int b, int op) {
-//     if(op==0) return a+b;
-//     if(op==1) return (a<b)?a:b;
-//     if(op==2) return (a>b)?a:b;
-//     return 0;
-// }
-
-// // Host version
-// inline int reduce_op_host(int a, int b, int op) {
-//     if(op==0) return a+b;
-//     if(op==1) return (a<b)?a:b;
-//     if(op==2) return (a>b)?a:b;
-//     return 0;
-// }
-
-// __global__ void reduce_kernel(const int* data, int* partial, int n, int opType, int identity) {
-//     extern __shared__ int sdata[];
-//     int tid = threadIdx.x;
-//     int i = blockIdx.x * blockDim.x * 2 + tid;
-//     int myval = identity;
-//     if (i < n) myval = data[i];
-//     if (i + blockDim.x < n) myval = reduce_op_device(myval, data[i + blockDim.x], opType);
-//     sdata[tid] = myval;
-//     __syncthreads();
-
-//     for (int s = blockDim.x/2; s>0; s>>=1) {
-//         if (tid < s)
-//             sdata[tid] = reduce_op_device(sdata[tid], sdata[tid+s], opType);
-//         __syncthreads();
-//     }
-//     if (tid==0) partial[blockIdx.x] = sdata[0];
-// }
-
-// // Host-side reduction wrapper (for int)
-// static int gpu_reduce(const std::vector<int>& col, int opType) {
-//     int N = col.size();
-//     if (N == 0)
-//         throw std::runtime_error("Cannot reduce empty vector.");
-
-//     int identity = 0;
-//     if(opType==1) identity = INT_MAX; // min
-//     if(opType==2) identity = INT_MIN; // max
-
-//     int* d_in = nullptr;
-//     int* d_out = nullptr;
-//     int threads = 256;
-//     int blocks = (N + threads*2 - 1) / (threads*2);
-//     checkCudaErrors(cudaMalloc(&d_in, N * sizeof(int)));
-//     checkCudaErrors(cudaMemcpy(d_in, col.data(), N * sizeof(int), cudaMemcpyHostToDevice));
-//     checkCudaErrors(cudaMalloc(&d_out, blocks * sizeof(int)));
-//     reduce_kernel<<<blocks, threads, threads * sizeof(int)>>>(d_in, d_out, N, opType, identity);
-//     checkCudaErrors(cudaDeviceSynchronize());
-//     std::vector<int> h_partial(blocks);
-//     checkCudaErrors(cudaMemcpy(h_partial.data(), d_out, blocks * sizeof(int), cudaMemcpyDeviceToHost));
-//     cudaFree(d_in);
-//     cudaFree(d_out);
-//     int result = identity;
-//     for(int i=0; i<blocks; ++i) result = reduce_op_host(result, h_partial[i], opType); // use host version here!
-//     return result;
-
-// }
-
-// int GPUAggregator::sumInt(const std::vector<int>& col)     { return gpu_reduce(col, 0); }
-// int GPUAggregator::minInt(const std::vector<int>& col)     { return gpu_reduce(col, 1); }
-// int GPUAggregator::maxInt(const std::vector<int>& col)     { return gpu_reduce(col, 2); }
-// int GPUAggregator::countInt(const std::vector<int>& col)   { return int(col.size()); }
-// double GPUAggregator::avgInt(const std::vector<int>& col)  { return (col.empty() ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(gpu_reduce(col, 0)) / col.size()); }
-
-// // -------------------------------------------
-// // ARGSORT KERNEL (Bitonic, for small-medium N)
-
-// __global__ void bitonic_argsort_kernel(int* data, int* indices, int n, int ascending) {
-//     // Shared mem for block (N ints, N indices)
-//     extern __shared__ int shared[];
-//     int* arr = shared;
-//     int* idx = shared + n;
-//     int tid = threadIdx.x;
-//     // Init
-//     if (tid < n) {
-//         arr[tid] = data[tid];
-//         idx[tid] = tid;
-//     }
-//     __syncthreads();
-
-//     // Bitonic sort, works best for power-of-2 N, but still correct otherwise for small N
-//     for (int k = 2; k <= n; k <<= 1) {
-//         for (int j = k >> 1; j > 0; j >>= 1) {
-//             int ixj = tid ^ j;
-//             if (ixj > tid && tid < n) {
-//                 // Compare for ascending/descending
-//                 bool swap = false;
-//                 if ( ((tid & k) == 0 && ((arr[tid] > arr[ixj]) == ascending)) ||
-//                     ((tid & k) != 0 && ((arr[tid] < arr[ixj]) == ascending)) )
-//                 {
-//                     swap = true;
-//                 }
-//                 if (swap) {
-//                     int tmpv = arr[tid];
-//                     arr[tid] = arr[ixj];
-//                     arr[ixj] = tmpv;
-//                     int tmpi = idx[tid];
-//                     idx[tid] = idx[ixj];
-//                     idx[ixj] = tmpi;
-//                 }
-//             }
-//             __syncthreads();
-//         }
-//     }
-//     if(tid < n)
-//         indices[tid] = idx[tid];
-// }
-
-// // Host wrapper for ARGSORT
-// std::vector<int> GPUAggregator::gpuArgsortInt(const std::vector<int>& col, bool ascending) {
-//     int N = col.size();
-//     if (N == 0) return {};
-
-//     // Use bitonic only up to 8192 rows
-//     const int MAX_N = 8192;
-//     if (N > MAX_N) {
-//         // Fallback to fast CPU std::argsort for huge N
-//         std::vector<int> indices(N);
-//         std::iota(indices.begin(), indices.end(), 0);
-//         std::sort(indices.begin(), indices.end(), [&](int a, int b){
-//             return ascending ? col[a] < col[b] : col[a] > col[b];
-//         });
-//         return indices;
-//     }
-
-//     int* d_col = nullptr;
-//     int* d_idx = nullptr;
-//     checkCudaErrors(cudaMalloc(&d_col, N * sizeof(int)));
-//     checkCudaErrors(cudaMalloc(&d_idx, N * sizeof(int)));
-//     checkCudaErrors(cudaMemcpy(d_col, col.data(), N * sizeof(int), cudaMemcpyHostToDevice));
-
-//     int blockSize = 1;
-//     int threadsPerBlock = N;
-//     int smemSize = 2 * N * sizeof(int);
-
-//     // Kernel launch safely — 1 block, N threads, enough shared mem
-//     bitonic_argsort_kernel<<<blockSize, threadsPerBlock, smemSize>>>(d_col, d_idx, N, ascending ? 1 : 0);
-//     checkCudaErrors(cudaDeviceSynchronize());
-
-//     std::vector<int> host_idx(N);
-//     checkCudaErrors(cudaMemcpy(host_idx.data(), d_idx, N * sizeof(int), cudaMemcpyDeviceToHost));
-
-//     cudaFree(d_col);
-//     cudaFree(d_idx);
-
-//     return host_idx;
-// }
+#include "../../include/Operations/GPUAggregator.cuh"
+#include "Utilities/ErrorHandling.hpp"
+#include <algorithm>
+#include <unordered_set>
+#include <cuda_runtime.h>
+#include <climits>
+#include <cfloat>
+
+#define CUDA_CHECK(err) do { \
+    cudaError_t err_val = (err); \
+    if (err_val != cudaSuccess) { \
+        throw std::runtime_error("CUDA error: " + std::string(cudaGetErrorString(err_val))); \
+    } \
+} while(0)
+
+#define THREADS_PER_BLOCK 256
+
+// CUDA kernel for COUNT operation
+__global__ void countKernel(size_t num_rows, int* result) {
+    extern __shared__ int shared_count[];
+    int tid = threadIdx.x;
+    shared_count[tid] = 0;
+
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_rows) {
+        shared_count[tid] = 1; // Each thread counts 1 for each valid row
+    }
+    __syncthreads();
+
+    // Reduction in shared memory
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            shared_count[tid] += shared_count[tid + s];
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        atomicAdd(result, shared_count[0]); // atomicAdd is supported for int
+    }
+}
+
+// CUDA kernel for SUM operation (for double)
+__global__ void sumKernelDouble(const double* data, size_t num_rows, double* result) {
+    extern __shared__ double shared_sum_double[];
+    int tid = threadIdx.x;
+    shared_sum_double[tid] = 0.0;
+
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_rows) {
+        shared_sum_double[tid] = data[idx];
+    }
+    __syncthreads();
+
+    // Reduction in shared memory
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            shared_sum_double[tid] += shared_sum_double[tid + s];
+        }
+        __syncthreads();
+    }
+
+    // Single thread updates the global result to avoid atomicAdd issues with double
+    if (tid == 0) {
+        *result += shared_sum_double[0];
+    }
+}
+
+// CUDA kernel for SUM operation (for int64_t)
+__global__ void sumKernelInt(const int64_t* data, size_t num_rows, int64_t* result) {
+    extern __shared__ int64_t shared_sum_int[];
+    int tid = threadIdx.x;
+    shared_sum_int[tid] = 0;
+
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_rows) {
+        shared_sum_int[tid] = data[idx];
+    }
+    __syncthreads();
+
+    // Reduction in shared memory
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            shared_sum_int[tid] += shared_sum_int[tid + s];
+        }
+        __syncthreads();
+    }
+
+    // Single thread updates the global result to avoid atomicAdd issues with int64_t on older architectures
+    if (tid == 0) {
+        *result += shared_sum_int[0];
+    }
+}
+
+// CUDA kernel for MIN/MAX operation (for double)
+__global__ void minMaxKernelDouble(const double* data, size_t num_rows, double* result, bool is_min) {
+    extern __shared__ double shared_val_double[];
+    int tid = threadIdx.x;
+    shared_val_double[tid] = is_min ? 1.0e308 : -1.0e308; // Large/small value for min/max initialization
+
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_rows) {
+        shared_val_double[tid] = data[idx];
+    }
+    __syncthreads();
+
+    // Reduction in shared memory
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            if (is_min) {
+                shared_val_double[tid] = (shared_val_double[tid] < shared_val_double[tid + s]) ? shared_val_double[tid] : shared_val_double[tid + s];
+            } else {
+                shared_val_double[tid] = (shared_val_double[tid] > shared_val_double[tid + s]) ? shared_val_double[tid] : shared_val_double[tid + s];
+            }
+        }
+        __syncthreads();
+    }
+
+    // Single thread updates the global result to avoid atomicMin/Max issues with double
+    if (tid == 0) {
+        double current = *result;
+        if (is_min) {
+            if (shared_val_double[0] < current) *result = shared_val_double[0];
+        } else {
+            if (shared_val_double[0] > current) *result = shared_val_double[0];
+        }
+    }
+}
+
+// CUDA kernel for MIN/MAX operation (for int64_t)
+__global__ void minMaxKernelInt(const int64_t* data, size_t num_rows, int64_t* result, bool is_min) {
+    extern __shared__ int64_t shared_val_int[];
+    int tid = threadIdx.x;
+    shared_val_int[tid] = is_min ? LLONG_MAX : LLONG_MIN;
+
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_rows) {
+        shared_val_int[tid] = data[idx];
+    }
+    __syncthreads();
+
+    // Reduction in shared memory
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            if (is_min) {
+                shared_val_int[tid] = (shared_val_int[tid] < shared_val_int[tid + s]) ? shared_val_int[tid] : shared_val_int[tid + s];
+            } else {
+                shared_val_int[tid] = (shared_val_int[tid] > shared_val_int[tid + s]) ? shared_val_int[tid] : shared_val_int[tid + s];
+            }
+        }
+        __syncthreads();
+    }
+
+    // Single thread updates the global result to avoid atomicMin/Max issues with int64_t on older architectures
+    if (tid == 0) {
+        int64_t current = *result;
+        if (is_min) {
+            if (shared_val_int[0] < current) *result = shared_val_int[0];
+        } else {
+            if (shared_val_int[0] > current) *result = shared_val_int[0];
+        }
+    }
+}
+
+GPUAggregatorPlan::GPUAggregatorPlan(std::unique_ptr<ExecutionPlan> input, const std::vector<hsql::Expr*>& select_list)
+    : input_(std::move(input)), select_list_(select_list) {}
+
+std::shared_ptr<Table> GPUAggregatorPlan::execute() {
+    std::shared_ptr<Table> table = input_->execute();
+    if (!table || table->getData().empty()) {
+        return table;
+    }
+
+    auto aggregates = parseAggregates(select_list_, *table);
+    return aggregateTableGPU(*table, aggregates);
+}
+
+std::vector<GPUAggregatorPlan::AggregateOp> GPUAggregatorPlan::parseAggregates(
+    const std::vector<hsql::Expr*>& select_list, const Table& table) {
+    std::vector<AggregateOp> aggregates;
+
+    for (const auto* expr : select_list) {
+        if (expr->type == hsql::kExprFunctionRef && expr->name) {
+            std::string func_name = expr->name;
+            std::transform(func_name.begin(), func_name.end(), func_name.begin(), ::tolower);
+
+            if (func_name == "count" || func_name == "sum" || func_name == "avg" ||
+                func_name == "min" || func_name == "max") {
+                AggregateOp op;
+                op.function_name = func_name;
+                op.is_distinct = expr->distinct;
+
+                if (expr->exprList && !expr->exprList->empty()) {
+                    const auto* arg = expr->exprList->at(0);
+                    if (arg->type == hsql::kExprColumnRef && arg->name) {
+                        op.column_name = arg->name;
+                        if (!table.hasColumn(op.column_name)) {
+                            throw SemanticError("Column not found for aggregate: " + op.column_name);
+                        }
+                        op.column_index = table.getColumnIndex(op.column_name);
+                    } else if (arg->type == hsql::kExprStar && func_name == "count") {
+                        op.column_name = table.getHeaders()[0];
+                        op.column_index = 0;
+                    } else {
+                        throw SemanticError("Invalid argument for aggregate function: " + func_name);
+                    }
+                } else {
+                    throw SemanticError("No arguments provided for aggregate function: " + func_name);
+                }
+
+                op.alias = expr->alias ? expr->alias : func_name + "(" + op.column_name + ")";
+                aggregates.push_back(op);
+            } else {
+                throw SemanticError("Unsupported aggregate function: " + func_name);
+            }
+        }
+    }
+
+    return aggregates;
+}
+
+// Helper function to convert unionV to string for distinct operations
+std::string unionValueToString(const unionV& value, ColumnType type) {
+    switch (type) {
+    case ColumnType::STRING:
+        return *(value.s);
+    case ColumnType::INTEGER:
+        return std::to_string(value.i);
+    case ColumnType::DOUBLE:
+        return std::to_string(value.d);
+    case ColumnType::DATETIME: {
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%04hu-%02hu-%02hu %02hhu:%02hhu:%02hhu",
+                 value.t->year, value.t->month, value.t->day,
+                 value.t->hour, value.t->minute, value.t->second);
+        return std::string(buffer);
+    }
+    default:
+        throw std::runtime_error("Unknown column type");
+    }
+}
+
+std::shared_ptr<Table> GPUAggregatorPlan::aggregateTableGPU(
+    const Table& table, const std::vector<AggregateOp>& aggregates) {
+    if (aggregates.empty()) {
+        throw SemanticError("No aggregate operations to perform");
+    }
+
+    std::unordered_map<std::string, std::vector<unionV>> result_data;
+    std::vector<std::string> result_headers;
+    std::unordered_map<std::string, ColumnType> result_types;
+    size_t num_rows = table.getSize();
+
+    for (const auto& op : aggregates) {
+        result_headers.push_back(op.alias);
+        ColumnType col_type = table.getColumnType(op.column_name);
+        result_types[op.alias] = (op.function_name == "count") ? ColumnType::INTEGER : col_type;
+
+        std::vector<unionV> result_col(1);
+
+        if (col_type == ColumnType::STRING && op.function_name != "count") {
+            if (op.function_name == "min" || op.function_name == "max") {
+                std::string extreme = (op.function_name == "min") ? table.getString(op.column_name, 0) : table.getString(op.column_name, 0);
+                for (size_t i = 1; i < num_rows; ++i) {
+                    std::string val = table.getString(op.column_name, i);
+                    if (op.function_name == "min" ? val < extreme : val > extreme) {
+                        extreme = val;
+                    }
+                }
+                result_col[0].s = new std::string(extreme);
+            } else {
+                throw SemanticError("Unsupported aggregate operation on STRING type: " + op.function_name);
+            }
+        } else {
+            if (op.function_name == "count") {
+                int h_result = 0;
+                int* d_result = nullptr;
+                CUDA_CHECK(cudaMalloc(&d_result, sizeof(int)));
+                CUDA_CHECK(cudaMemset(d_result, 0, sizeof(int)));
+
+                int blocks = (num_rows + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+                size_t shared_mem_size = THREADS_PER_BLOCK * sizeof(int);
+                countKernel<<<blocks, THREADS_PER_BLOCK, shared_mem_size>>>(num_rows, d_result);
+                CUDA_CHECK(cudaGetLastError());
+                CUDA_CHECK(cudaDeviceSynchronize());
+
+                CUDA_CHECK(cudaMemcpy(&h_result, d_result, sizeof(int), cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaFree(d_result));
+
+                if (op.is_distinct) {
+                    std::unordered_set<std::string> unique_values;
+                    for (size_t i = 0; i < num_rows; ++i) {
+                        std::string val_str;
+                        switch (col_type) {
+                            case ColumnType::STRING:
+                                val_str = table.getString(op.column_name, i);
+                                break;
+                            case ColumnType::INTEGER:
+                                val_str = std::to_string(table.getInteger(op.column_name, i));
+                                break;
+                            case ColumnType::DOUBLE:
+                                val_str = std::to_string(table.getDouble(op.column_name, i));
+                                break;
+                            case ColumnType::DATETIME:
+                                val_str = unionValueToString(table.getRow(i)[op.column_index], col_type);
+                                break;
+                        }
+                        unique_values.insert(val_str);
+                    }
+                    result_col[0].i = unique_values.size();
+                } else {
+                    result_col[0].i = h_result;
+                }
+            } else if (op.function_name == "sum" || op.function_name == "avg") {
+                if (col_type == ColumnType::INTEGER) {
+                    std::vector<int64_t> h_data(num_rows);
+                    for (size_t i = 0; i < num_rows; ++i) {
+                        h_data[i] = table.getInteger(op.column_name, i);
+                    }
+
+                    int64_t h_result = 0;
+                    int64_t* d_data = nullptr;
+                    int64_t* d_result = nullptr;
+                    CUDA_CHECK(cudaMalloc(&d_data, num_rows * sizeof(int64_t)));
+                    CUDA_CHECK(cudaMalloc(&d_result, sizeof(int64_t)));
+                    CUDA_CHECK(cudaMemset(d_result, 0, sizeof(int64_t)));
+                    CUDA_CHECK(cudaMemcpy(d_data, h_data.data(), num_rows * sizeof(int64_t), cudaMemcpyHostToDevice));
+
+                    int blocks = (num_rows + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+                    size_t shared_mem_size = THREADS_PER_BLOCK * sizeof(int64_t);
+                    sumKernelInt<<<blocks, THREADS_PER_BLOCK, shared_mem_size>>>(d_data, num_rows, d_result);
+                    CUDA_CHECK(cudaGetLastError());
+                    CUDA_CHECK(cudaDeviceSynchronize());
+
+                    CUDA_CHECK(cudaMemcpy(&h_result, d_result, sizeof(int64_t), cudaMemcpyDeviceToHost));
+                    CUDA_CHECK(cudaFree(d_data));
+                    CUDA_CHECK(cudaFree(d_result));
+
+                    if (op.function_name == "avg") {
+                        result_col[0].d = static_cast<double>(h_result) / num_rows;
+                    } else {
+                        result_col[0].i = h_result;
+                    }
+                } else if (col_type == ColumnType::DOUBLE || col_type == ColumnType::DATETIME) {
+                    std::vector<double> h_data(num_rows);
+                    for (size_t i = 0; i < num_rows; ++i) {
+                        h_data[i] = (col_type == ColumnType::DOUBLE) ? table.getDouble(op.column_name, i) : 0.0;
+                    }
+
+                    double h_result = 0.0;
+                    double* d_data = nullptr;
+                    double* d_result = nullptr;
+                    CUDA_CHECK(cudaMalloc(&d_data, num_rows * sizeof(double)));
+                    CUDA_CHECK(cudaMalloc(&d_result, sizeof(double)));
+                    CUDA_CHECK(cudaMemset(d_result, 0, sizeof(double)));
+                    CUDA_CHECK(cudaMemcpy(d_data, h_data.data(), num_rows * sizeof(double), cudaMemcpyHostToDevice));
+
+                    int blocks = (num_rows + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+                    size_t shared_mem_size = THREADS_PER_BLOCK * sizeof(double);
+                    sumKernelDouble<<<blocks, THREADS_PER_BLOCK, shared_mem_size>>>(d_data, num_rows, d_result);
+                    CUDA_CHECK(cudaGetLastError());
+                    CUDA_CHECK(cudaDeviceSynchronize());
+
+                    CUDA_CHECK(cudaMemcpy(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost));
+                    CUDA_CHECK(cudaFree(d_data));
+                    CUDA_CHECK(cudaFree(d_result));
+
+                    if (op.function_name == "avg") {
+                        result_col[0].d = h_result / num_rows;
+                    } else {
+                        result_col[0].d = h_result;
+                    }
+                }
+            } else if (op.function_name == "min" || op.function_name == "max") {
+                bool is_min = (op.function_name == "min");
+                if (col_type == ColumnType::INTEGER) {
+                    std::vector<int64_t> h_data(num_rows);
+                    for (size_t i = 0; i < num_rows; ++i) {
+                        h_data[i] = table.getInteger(op.column_name, i);
+                    }
+
+                    int64_t h_result = is_min ? LLONG_MAX : LLONG_MIN;
+                    int64_t* d_data = nullptr;
+                    int64_t* d_result = nullptr;
+                    CUDA_CHECK(cudaMalloc(&d_data, num_rows * sizeof(int64_t)));
+                    CUDA_CHECK(cudaMalloc(&d_result, sizeof(int64_t)));
+                    CUDA_CHECK(cudaMemcpy(d_result, &h_result, sizeof(int64_t), cudaMemcpyHostToDevice));
+                    CUDA_CHECK(cudaMemcpy(d_data, h_data.data(), num_rows * sizeof(int64_t), cudaMemcpyHostToDevice));
+
+                    int blocks = (num_rows + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+                    size_t shared_mem_size = THREADS_PER_BLOCK * sizeof(int64_t);
+                    minMaxKernelInt<<<blocks, THREADS_PER_BLOCK, shared_mem_size>>>(d_data, num_rows, d_result, is_min);
+                    CUDA_CHECK(cudaGetLastError());
+                    CUDA_CHECK(cudaDeviceSynchronize());
+
+                    CUDA_CHECK(cudaMemcpy(&h_result, d_result, sizeof(int64_t), cudaMemcpyDeviceToHost));
+                    CUDA_CHECK(cudaFree(d_data));
+                    CUDA_CHECK(cudaFree(d_result));
+
+                    result_col[0].i = h_result;
+                } else if (col_type == ColumnType::DOUBLE || col_type == ColumnType::DATETIME) {
+                    std::vector<double> h_data(num_rows);
+                    for (size_t i = 0; i < num_rows; ++i) {
+                        h_data[i] = (col_type == ColumnType::DOUBLE) ? table.getDouble(op.column_name, i) : 0.0;
+                    }
+
+                    double h_result = is_min ? 1.0e308 : -1.0e308;
+                    double* d_data = nullptr;
+                    double* d_result = nullptr;
+                    CUDA_CHECK(cudaMalloc(&d_data, num_rows * sizeof(double)));
+                    CUDA_CHECK(cudaMalloc(&d_result, sizeof(double)));
+                    CUDA_CHECK(cudaMemcpy(d_result, &h_result, sizeof(double), cudaMemcpyHostToDevice));
+                    CUDA_CHECK(cudaMemcpy(d_data, h_data.data(), num_rows * sizeof(double), cudaMemcpyHostToDevice));
+
+                    int blocks = (num_rows + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+                    size_t shared_mem_size = THREADS_PER_BLOCK * sizeof(double);
+                    minMaxKernelDouble<<<blocks, THREADS_PER_BLOCK, shared_mem_size>>>(d_data, num_rows, d_result, is_min);
+                    CUDA_CHECK(cudaGetLastError());
+                    CUDA_CHECK(cudaDeviceSynchronize());
+
+                    CUDA_CHECK(cudaMemcpy(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost));
+                    CUDA_CHECK(cudaFree(d_data));
+                    CUDA_CHECK(cudaFree(d_result));
+
+                    result_col[0].d = h_result;
+                }
+            }
+        }
+        result_data[op.alias] = std::move(result_col);
+    }
+
+    return std::make_shared<Table>(
+        table.getName() + "_gpu_aggregated",
+        result_headers,
+        std::move(result_data),
+        result_types);
+}
