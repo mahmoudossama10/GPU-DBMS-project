@@ -283,12 +283,25 @@ GPUJoinPlan::GPUJoinPlan(std::unique_ptr<ExecutionPlan> leftTable,
       whereString(where),
       gpu_manager_(gpu_manager) {}
 
+GPUOrderByPlan::GPUOrderByPlan(std::shared_ptr<Table> input,
+                               const std::vector<hsql::OrderDescription *> &order_exprs,
+                               std::shared_ptr<GPUManager> gpu_manager)
+    : input_(input), order_exprs_(order_exprs), gpu_manager_(gpu_manager) {}
+
+std::shared_ptr<Table> GPUOrderByPlan::execute()
+{
+
+    return gpu_manager_->executeOrderBy(input_, order_exprs_);
+}
+
 GPUJoinPlanMultipleTable::GPUJoinPlanMultipleTable(std::vector<std::unique_ptr<ExecutionPlan>> tables,
                                                    std::string where,
                                                    std::shared_ptr<GPUManager> gpu_manager)
     : tablesExecutionPlan_(std::move(tables)),
       whereString(where),
-      gpu_manager_(gpu_manager) {}
+      gpu_manager_(gpu_manager)
+{
+}
 
 void collectConditions(const hsql::Expr *expr, std::vector<const hsql::Expr *> &conditions)
 {
@@ -1137,7 +1150,6 @@ std::shared_ptr<Table> PlanBuilder::buildProjectPlan(
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildPassPlane(
     std::unique_ptr<ExecutionPlan> input)
 {
-
     return std::make_unique<PassPlan>(std::move(input));
 }
 
@@ -1157,14 +1169,14 @@ std::shared_ptr<Table> PlanBuilder::buildOrderByPlan(
     return result;
 }
 
-// std::shared_ptr<Table> PlanBuilder::buildGPUOrderByPlan(
-//     std::shared_ptr<Table> input,
-//     const std::vector<hsql::OrderDescription *> &order_exprs)
-// {
-//     auto plan = std::make_unique<GPUOrderByPlan>(input, order_exprs);
-//     auto result = plan->execute();
-//     return result;
-// }
+std::shared_ptr<Table> PlanBuilder::buildGPUOrderByPlan(
+    std::shared_ptr<Table> input,
+    const std::vector<hsql::OrderDescription *> &order_exprs)
+{
+    auto plan = std::make_unique<GPUOrderByPlan>(input, order_exprs, gpu_manager_);
+    auto result = plan->execute();
+    return result;
+}
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildScanPlan(const hsql::TableRef *table)
 {

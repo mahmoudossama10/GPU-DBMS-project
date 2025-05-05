@@ -25,6 +25,9 @@
 #include "../DataHandling/StorageManager.hpp"
 #include "GPU.hpp" // Include the GPU header
 // Flag to control GPU acceleration
+struct GPUSortColumn;
+struct RowIndexValue;
+
 enum class ExecutionMode
 {
     CPU,
@@ -64,6 +67,19 @@ private:
     std::shared_ptr<GPUManager> gpu_manager_;
 };
 
+class GPUOrderByPlan : public ExecutionPlan
+{
+public:
+    GPUOrderByPlan(std::shared_ptr<Table> input,
+                   const std::vector<hsql::OrderDescription *> &order_exprs,
+                   std::shared_ptr<GPUManager> gpu_manager);
+    std::shared_ptr<Table> execute() override;
+
+private:
+    std::shared_ptr<Table> input_;
+    std::vector<hsql::OrderDescription *> order_exprs_;
+    std::shared_ptr<GPUManager> gpu_manager_;
+};
 class GPUJoinPlanMultipleTable : public ExecutionPlan
 {
 public:

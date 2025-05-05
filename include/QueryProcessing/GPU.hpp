@@ -9,6 +9,23 @@
 #include <hsql/util/sqlhelper.h>
 #include <hsql/SQLParser.h>
 
+#include "Utilities/ErrorHandling.hpp"
+#include <unordered_map>
+
+// Define a structure that can be passed to the GPU
+struct GPUSortColumn
+{
+    size_t column_index;
+    bool is_ascending;
+    int type; // Using int instead of enum for simplicity on GPU
+};
+
+// Structure for row indices
+struct RowIndexValue
+{
+    size_t row_index; // Original row index - needed for stable sort
+};
+
 class GPUManager
 {
 public:
@@ -40,6 +57,16 @@ public:
     std::shared_ptr<Table> executeMultipleTableJoin(
         const std::vector<std::shared_ptr<Table>> &tables,
         const hsql::Expr *joinConditions);
+
+    std::shared_ptr<Table> executeOrderBy(
+        std::shared_ptr<Table> table,
+        const std::vector<hsql::OrderDescription *> &order_exprs_);
+    struct SortColumn
+    {
+        size_t column_index;
+        bool is_ascending;
+        ColumnType type;
+    };
 
 private:
     // Flag indicating if GPU is available
@@ -74,4 +101,6 @@ private:
     std::vector<std::vector<unionV>> mergeBatchResults(
         const std::vector<std::shared_ptr<Table>> &tables,
         const std::vector<std::vector<int>> &selectedIndices);
+
+    std::vector<SortColumn> parseOrderBy(const Table &table, const std::vector<hsql::OrderDescription *> &order_exprs_);
 };
