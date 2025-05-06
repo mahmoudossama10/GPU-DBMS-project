@@ -1009,6 +1009,15 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
         break;
     }
+
+    case duckdb::LogicalOperatorType::LOGICAL_EMPTY_RESULT:
+    {
+        auto *table_join = dynamic_cast<duckdb::LogicalCrossProduct *>(duckdb_plan.get());
+
+        plan = buildCPUJoinPlan(std::move(children), "");
+
+        break;
+    }
     // Add other operator types as needed
     default:
         plan = buildPassPlane(std::move(children[0]));
