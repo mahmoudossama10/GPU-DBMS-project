@@ -52,6 +52,7 @@ public:
     {
         PlanBuilder::setExecutionMode(mode);
     }
+    std::string removeAggregatesFromQuery(const std::string &query);
 
 private:
     std::shared_ptr<StorageManager> storage_;

@@ -13,6 +13,94 @@ QueryExecutor::QueryExecutor(std::shared_ptr<StorageManager> storage)
     : storage_(storage),
       plan_builder_(std::make_unique<PlanBuilder>(storage)) {}
 
+std::string QueryExecutor::removeAggregatesFromQuery(const std::string &query)
+{
+    // First, find the SELECT and FROM positions to identify our working area
+    std::string upperQuery = query;
+    std::transform(upperQuery.begin(), upperQuery.end(), upperQuery.begin(),
+                   [](unsigned char c)
+                   { return std::toupper(c); });
+
+    size_t selectPos = upperQuery.find("SELECT");
+    size_t fromPos = upperQuery.find("FROM");
+
+    if (selectPos == std::string::npos || fromPos == std::string::npos || selectPos >= fromPos)
+    {
+        // Invalid SQL query format
+        return query;
+    }
+
+    // Extract the selection part
+    std::string selectionPart = query.substr(selectPos + 6, fromPos - (selectPos + 6));
+    std::string restOfQuery = query.substr(fromPos);
+
+    // Split the selection part by commas
+    std::vector<std::string> columns;
+    size_t start = 0;
+    bool insideParentheses = false;
+
+    for (size_t i = 0; i < selectionPart.length(); i++)
+    {
+        if (selectionPart[i] == '(')
+        {
+            insideParentheses = true;
+        }
+        else if (selectionPart[i] == ')')
+        {
+            insideParentheses = false;
+        }
+        else if (selectionPart[i] == ',' && !insideParentheses)
+        {
+            columns.push_back(selectionPart.substr(start, i - start));
+            start = i + 1;
+        }
+    }
+
+    // Add the last column
+    columns.push_back(selectionPart.substr(start));
+
+    // Process each column to remove aggregates
+    std::vector<std::string> filteredColumns;
+    std::regex aggregatePattern("\\s*(COUNT|SUM|AVG|MIN|MAX)\\s*\\([^)]*\\)\\s*(?:AS\\s+([^,\\s]+))?",
+                                std::regex_constants::icase);
+
+    for (const auto &column : columns)
+    {
+        std::smatch matches;
+        if (!std::regex_search(column, matches, aggregatePattern))
+        {
+            // Only keep columns that are not aggregates
+            filteredColumns.push_back(column);
+        }
+        // We completely skip aggregates now, not preserving aliases
+    }
+
+    // Rebuild the query
+    std::string result = "SELECT ";
+
+    // If no columns remain after removing aggregates, add a * wildcard
+    if (filteredColumns.empty())
+    {
+        result += "* ";
+    }
+    else
+    {
+        for (size_t i = 0; i < filteredColumns.size(); i++)
+        {
+            if (i > 0)
+            {
+                result += ", ";
+            }
+            result += filteredColumns[i];
+        }
+        result += " ";
+    }
+
+    result += restOfQuery;
+
+    return result;
+}
+
 SubqueryInfo QueryExecutor::extractSubquery(const std::string &query)
 {
     SubqueryInfo result;
@@ -220,6 +308,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
 
 std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt, const std::string &query)
 {
+
     validateSelectStatement(stmt);
 
     std::vector<std::string> allTableNamesOriginal;
@@ -268,7 +357,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     // std::vector<std::string> allTableNames = storage_->getTableNames();
 
     // Constant for batch size
-    const size_t BATCH_SIZE = 60000000;
+    const size_t BATCH_SIZE = 500;
 
     // Create batched tables from all tables
     for (int i = 0; i < allTableNames.size(); i++)
@@ -330,7 +419,10 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     }
 
     // Process query on batched tables recursively
-    std::shared_ptr<Table> result = processBatchedQuery(stmt, query);
+
+    auto newQuery = removeAggregatesFromQuery(query);
+
+    std::shared_ptr<Table> result = processBatchedQuery(stmt, newQuery);
 
     /*
     agg
@@ -350,10 +442,17 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 
     */
 
+    hsql::SQLParserResult resultWithoutAgg;
+    hsql::SQLParser::parse(newQuery, &resultWithoutAgg);
+    const auto *stmtWithoutAgg = static_cast<const hsql::SelectStatement *>(resultWithoutAgg.getStatement(0));
+
+    std::shared_ptr<Table> aggResult;
     if (plan_builder_->hasAggregates(*(stmt->selectList)))
     {
-        //result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
-        result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
+        // result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
+        // result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
+        aggResult = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
+        // result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
     }
 
     if (stmt->order && !stmt->order->empty())
@@ -362,9 +461,48 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
         result = plan_builder_->buildGPUOrderByPlan(result, *stmt->order);
     }
 
-    if (!plan_builder_->isSelectAll(stmt->selectList) && plan_builder_->selectListNeedsProjection(*(stmt->selectList)))
+    if (!plan_builder_->isSelectAll(stmtWithoutAgg->selectList) && plan_builder_->selectListNeedsProjection(*(stmtWithoutAgg->selectList)))
     {
-        result = plan_builder_->buildProjectPlan(result, *(stmt->selectList));
+        result = plan_builder_->buildProjectPlan(result, *(stmtWithoutAgg->selectList));
+    }
+
+    if (plan_builder_->hasAggregates(*(stmt->selectList)) && plan_builder_->hasOtherSelectNotAggregates(*(stmt->selectList)))
+    {
+        // Prepare new data structures
+        std::unordered_map<std::string, std::vector<unionV>> newColumnData;
+        std::unordered_map<std::string, ColumnType> newColumnTypes;
+        std::vector<std::string> newHeaders;
+
+        size_t targetSize = result->getSize();
+
+        for (size_t i = 0; i < result->getHeaders().size(); i++)
+        {
+            std::string columnName = result->getHeaders()[i];
+
+            // Store column data and metadata
+            newColumnData[columnName] = std::move(result->columnData.at(columnName));
+            newColumnTypes[columnName] = result->getColumnType(columnName);
+            newHeaders.push_back(columnName);
+        }
+
+        for (size_t i = 0; i < aggResult->getHeaders().size(); i++)
+        {
+            std::string columnName = aggResult->getHeaders()[i];
+
+            // Extract the first value from the aggregated column
+            auto firstValue = aggResult->columnData.at(columnName)[0];
+
+            // Broadcast the value
+            std::vector<unionV> newColumn(targetSize, firstValue);
+
+            // Store column data and metadata
+            newColumnData[columnName] = std::move(newColumn);
+            newColumnTypes[columnName] = aggResult->getColumnType(columnName);
+            newHeaders.push_back(columnName);
+        }
+
+        // Create the new table using the accumulated data
+        result = std::make_shared<Table>("final_result_large", newHeaders, newColumnData, newColumnTypes);
     }
 
     // result = plan_builder_->buildOrderByPlan(result, *stmt->order);

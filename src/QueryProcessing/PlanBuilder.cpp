@@ -435,6 +435,18 @@ bool PlanBuilder::hasAggregates(const std::vector<hsql::Expr *> &select_list)
     }
     return false;
 }
+
+
+bool PlanBuilder::hasOtherSelectNotAggregates(const std::vector<hsql::Expr *> &select_list)
+{
+    for (auto *expr : select_list)
+    {
+        if (expr->type != hsql::kExprFunctionRef)
+            return true;
+    }
+    return false;
+}
+
 bool PlanBuilder::selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList)
 {
     // If * present, never project

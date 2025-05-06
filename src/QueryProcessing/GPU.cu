@@ -305,8 +305,113 @@ __device__ int strcmp_device(const char* str1, const char* str2) {
 //////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////
 
+__device__ int compareStrings(const char* str1, const char* str2) {
+    int i = 0;
+    while (str1[i] != '\0' && str2[i] != '\0') {
+        if (str1[i] < str2[i]) return -1;
+        if (str1[i] > str2[i]) return 1;
+        i++;
+    }
+    
+    if (str1[i] == '\0' && str2[i] == '\0') return 0;
+    if (str1[i] == '\0') return -1;
+    return 1;
+}
 
 
+// Optimized kernel for string comparison utilizing shared memory and coalesced access
+__global__ void evaluateStringComparisonBatchOptimized(
+    const char* __restrict__ leftStringData,  // Flattened buffer containing all left strings
+    const char* __restrict__ rightStringData, // Flattened buffer containing all right strings
+    const int* __restrict__ leftOffsets,      // Starting offsets for each left string
+    const int* __restrict__ rightOffsets,     // Starting offsets for each right string
+    const int* __restrict__ tableSizes,       // Array containing sizes of all tables
+    int numTables,                           // Total number of tables
+    int leftTableIdx,                        // Index of left table in the tables array
+    int rightTableIdx,                       // Index of right table in the tables array
+    int opType,                              // Operation type (0=eq, 1=neq, 2=lt, etc.)
+    int64_t* __restrict__ results,           // Results array
+    int batchSize,                           // Total number of comparisons to perform
+    int leftBatchSize,                       // Size of left column
+    int rightBatchSize)                      // Size of right column
+{
+    // Use shared memory for frequently accessed table metadata
+    __shared__ int sharedTableSizes[32]; // Assuming max 32 tables
+    
+    // Load table sizes into shared memory (only first few threads)
+    if (threadIdx.x < numTables) {
+        sharedTableSizes[threadIdx.x] = tableSizes[threadIdx.x];
+    }
+    __syncthreads();
+    
+    // Process multiple elements per thread for better efficiency
+    const int elementsPerThread = 4;
+    const int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+    const int totalThreads = gridDim.x * blockDim.x;
+    
+    // Each thread processes multiple elements
+    for (int i = 0; i < elementsPerThread; i++) {
+        int idx = threadId * elementsPerThread + i;
+        
+        if (idx < batchSize) {
+            // Calculate indices for each table from the flattened index
+            int indices[32]; // Assuming maximum 32 tables
+            int remainingIdx = idx;
+            
+            #pragma unroll 8  // Unroll for common case (up to 8 tables)
+            for (int t = 0; t < numTables; t++) {
+                int tableSize = sharedTableSizes[t];
+                indices[t] = remainingIdx % tableSize;
+                remainingIdx /= tableSize;
+            }
+
+            // Get indices into the tables
+            int leftIdx = indices[leftTableIdx];
+            int rightIdx = indices[rightTableIdx];
+            
+            // Skip if out of bounds
+            if (leftIdx >= leftBatchSize || rightIdx >= rightBatchSize) {
+                continue;
+            }
+            
+            // Get pointers to the actual strings using offsets
+            const char* leftStr = &leftStringData[leftOffsets[leftIdx]];
+            const char* rightStr = &rightStringData[rightOffsets[rightIdx]];
+            
+            // Compare strings
+            int cmpResult = compareStrings(leftStr, rightStr);
+            
+            // Evaluate the comparison based on operation type
+            int64_t match;
+            
+            switch (opType) {
+                case 0: // Equals
+                    match = (cmpResult == 0) ? 1 : 0;
+                    break;
+                case 1: // Not Equals
+                    match = (cmpResult != 0) ? 1 : 0;
+                    break;
+                case 2: // Less Than
+                    match = (cmpResult < 0) ? 1 : 0;
+                    break;
+                case 3: // Greater Than
+                    match = (cmpResult > 0) ? 1 : 0;
+                    break;
+                case 4: // Less Than or Equals
+                    match = (cmpResult <= 0) ? 1 : 0;
+                    break;
+                case 5: // Greater Than or Equals
+                    match = (cmpResult >= 0) ? 1 : 0;
+                    break;
+                default:
+                    match = 0;
+            }
+            
+            // Store the result
+            results[idx] = match;
+        }
+    }
+}
 
 // Optimized kernel utilizing shared memory and coalesced access
 __global__ void evaluateComparisonBatchOptimized(
@@ -727,80 +832,200 @@ void GPUManager::evaluateConditionOnBatch(
         const auto& rightTable = tables[rightTableIdx];
         
         // Verify column types are integers
-        if (leftTable->getColumnType(leftColName) != ColumnType::INTEGER || 
-            rightTable->getColumnType(rightColName) != ColumnType::INTEGER) {
-            // We're only implementing integer comparisons in this version
-            return ;
-        }
-        
-        // Extract the batch data for the columns we need to compare
-        int leftBatchSize = leftTable->getSize();
-        int rightBatchSize = rightTable->getSize();
-        
-        // Get integer column data directly from the Table class
-        // (using the cached int columns from the Table implementation)
-        const auto& leftColumnData = leftTable->getData().at(leftColName);
-        const auto& rightColumnData = rightTable->getData().at(rightColName);
-        
-        
+        if (leftTable->getColumnType(leftColName) == ColumnType::INTEGER && 
+            rightTable->getColumnType(rightColName) == ColumnType::INTEGER) {
+            // Extract the batch data for the columns we need to compare
+            int leftBatchSize = leftTable->getSize();
+            int rightBatchSize = rightTable->getSize();
+                
+            // Get integer column data directly from the Table class
+            // (using the cached int columns from the Table implementation)
+            const auto& leftColumnData = leftTable->getData().at(leftColName);
+            const auto& rightColumnData = rightTable->getData().at(rightColName);
+                
+                
 
-        // Stream for asynchronous operations
-        cudaStream_t stream;
-        cudaStreamCreate(&stream);
+            // Stream for asynchronous operations
+            cudaStream_t stream;
+            cudaStreamCreate(&stream);
+                
+            // Allocate device memory
+            int64_t *d_leftCol, *d_rightCol;
+            int* d_tableSizes;
+                
+            cudaMalloc(&d_leftCol, leftBatchSize * sizeof(int64_t));
+            cudaMalloc(&d_rightCol, rightBatchSize * sizeof(int64_t));
+                
+            // Create table indices information
+            std::vector<int> tableSizes;
+            for (const auto& table : tables) {
+                tableSizes.push_back(table->getSize());
+            }
+
+            cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
+
+            // Async memory transfers
+            cudaMemcpyAsync(d_leftCol, leftColumnData.data(), leftBatchSize * sizeof(int64_t), cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_rightCol, rightColumnData.data(), rightBatchSize * sizeof(int64_t), cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice, stream);
+
+            // Calculate threads needed
+            const int blockSize = 256;
+
+            // Calculate grid size - we process multiple elements per thread
+            const int elementsPerThread = 4;
+            const int effectiveThreads = (batchSize + elementsPerThread - 1) / elementsPerThread;
+            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
+
+            // Launch optimized kernel
+            if(direction == 0){
+                evaluateComparisonBatchOptimized<<<gridSize, blockSize, 0, stream>>>(
+                    d_leftCol, d_rightCol, 
+                    d_tableSizes, tables.size(),
+                    leftTableIdx, rightTableIdx,
+                    opType, d_leftResults_join, batchSize,
+                    leftBatchSize, rightBatchSize);
+            }else{
+                evaluateComparisonBatchOptimized<<<gridSize, blockSize, 0, stream>>>(
+                    d_leftCol, d_rightCol, 
+                    d_tableSizes, tables.size(),
+                    leftTableIdx, rightTableIdx,
+                    opType, d_rightResults_join, batchSize,
+                    leftBatchSize, rightBatchSize);
+            }
         
-        // Allocate device memory
-        int64_t *d_leftCol, *d_rightCol;
-        int* d_tableSizes;
-        
-        cudaMalloc(&d_leftCol, leftBatchSize * sizeof(int64_t));
-        cudaMalloc(&d_rightCol, rightBatchSize * sizeof(int64_t));
-        
-        // Create table indices information
-        std::vector<int> tableSizes;
-        for (const auto& table : tables) {
-            tableSizes.push_back(table->getSize());
-        }
-        
-        cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
-        
-        // Async memory transfers
-        cudaMemcpyAsync(d_leftCol, leftColumnData.data(), leftBatchSize * sizeof(int64_t), cudaMemcpyHostToDevice, stream);
-        cudaMemcpyAsync(d_rightCol, rightColumnData.data(), rightBatchSize * sizeof(int64_t), cudaMemcpyHostToDevice, stream);
-        cudaMemcpyAsync(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice, stream);
-        
-        // Calculate threads needed
-        const int blockSize = 256;
-        
-        // Calculate grid size - we process multiple elements per thread
-        const int elementsPerThread = 4;
-        const int effectiveThreads = (batchSize + elementsPerThread - 1) / elementsPerThread;
-        const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
-        
-        // Launch optimized kernel
-        if(direction == 0){
-            evaluateComparisonBatchOptimized<<<gridSize, blockSize, 0, stream>>>(
-                d_leftCol, d_rightCol, 
-                d_tableSizes, tables.size(),
-                leftTableIdx, rightTableIdx,
-                opType, d_leftResults_join, batchSize,
-                leftBatchSize, rightBatchSize);
+            // Synchronize to ensure results are ready
+            cudaStreamSynchronize(stream);
+            
+            // Free resources
+            cudaFree(d_leftCol);
+            cudaFree(d_rightCol);
+            cudaFree(d_tableSizes);
+            cudaStreamDestroy(stream);
         }else{
-            evaluateComparisonBatchOptimized<<<gridSize, blockSize, 0, stream>>>(
-                d_leftCol, d_rightCol, 
-                d_tableSizes, tables.size(),
-                leftTableIdx, rightTableIdx,
-                opType, d_rightResults_join, batchSize,
-                leftBatchSize, rightBatchSize);
+             // Handle string column comparison
+            // Extract the batch data for the columns we need to compare
+            int leftBatchSize = leftTable->getSize();
+            int rightBatchSize = rightTable->getSize();
+
+            // Get string column data
+            const auto& leftColumnData = leftTable->getData().at(leftColName);
+            const auto& rightColumnData = rightTable->getData().at(rightColName);
+
+            // Calculate offsets and total string sizes
+            std::vector<int> leftOffsets(leftBatchSize);
+            std::vector<int> rightOffsets(rightBatchSize);
+
+            int leftTotalSize = 0;
+            int rightTotalSize = 0;
+
+            // Calculate offsets and total sizes
+            for (int i = 0; i < leftBatchSize; i++) {
+                leftOffsets[i] = leftTotalSize;
+                leftTotalSize += leftColumnData[i].s->length() + 1; // +1 for null terminator
+            }
+
+            for (int j = 0; j < rightBatchSize; j++) {
+                rightOffsets[j] = rightTotalSize;
+                rightTotalSize += rightColumnData[j].s->length() + 1; // +1 for null terminator
+            }
+
+            // Create flattened host buffers for string data
+            std::vector<char> leftStringData(leftTotalSize);
+            std::vector<char> rightStringData(rightTotalSize);
+
+            // Copy string data to flattened buffers
+            for (int i = 0; i < leftBatchSize; i++) {
+                const std::string& str = *(leftColumnData[i].s);
+                std::memcpy(&leftStringData[leftOffsets[i]], str.c_str(), str.length() + 1);
+            }
+
+            for (int j = 0; j < rightBatchSize; j++) {
+                const std::string& str = *(rightColumnData[j].s);
+                std::memcpy(&rightStringData[rightOffsets[j]], str.c_str(), str.length() + 1);
+            }
+
+            // Stream for asynchronous operations
+            cudaStream_t stream;
+            cudaStreamCreate(&stream);
+
+            // Allocate device memory
+            char* d_leftStringData;
+            char* d_rightStringData;
+            int* d_leftOffsets;
+            int* d_rightOffsets;
+            int* d_tableSizes;
+
+            // Create table indices information
+            std::vector<int> tableSizes;
+            for (const auto& table : tables) {
+                tableSizes.push_back(table->getSize());
+            }
+
+            // Allocate memory on device
+            cudaMalloc(&d_leftStringData, leftTotalSize * sizeof(char));
+            cudaMalloc(&d_rightStringData, rightTotalSize * sizeof(char));
+            cudaMalloc(&d_leftOffsets, leftBatchSize * sizeof(int));
+            cudaMalloc(&d_rightOffsets, rightBatchSize * sizeof(int));
+            cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
+
+            // Async memory transfers
+            cudaMemcpyAsync(d_leftStringData, leftStringData.data(), leftTotalSize * sizeof(char), 
+                           cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_rightStringData, rightStringData.data(), rightTotalSize * sizeof(char), 
+                           cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_leftOffsets, leftOffsets.data(), leftBatchSize * sizeof(int), 
+                           cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_rightOffsets, rightOffsets.data(), rightBatchSize * sizeof(int), 
+                           cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), 
+                           cudaMemcpyHostToDevice, stream);
+
+            // Calculate threads needed
+            const int blockSize = 256;
+
+            // Calculate grid size - we process multiple elements per thread
+            const int elementsPerThread = 4;
+            const int effectiveThreads = (batchSize + elementsPerThread - 1) / elementsPerThread;
+            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
+
+            // Launch optimized kernel
+            if(direction == 0){
+                evaluateStringComparisonBatchOptimized<<<gridSize, blockSize, 0, stream>>>(
+                    d_leftStringData, d_rightStringData,
+                    d_leftOffsets, d_rightOffsets,
+                    d_tableSizes, tables.size(),
+                    leftTableIdx, rightTableIdx,
+                    opType, d_leftResults_join, batchSize,
+                    leftBatchSize, rightBatchSize);
+            }else{
+                evaluateStringComparisonBatchOptimized<<<gridSize, blockSize, 0, stream>>>(
+                    d_leftStringData, d_rightStringData,
+                    d_leftOffsets, d_rightOffsets,
+                    d_tableSizes, tables.size(),
+                    leftTableIdx, rightTableIdx,
+                    opType, d_rightResults_join, batchSize,
+                    leftBatchSize, rightBatchSize);
+            }
+
+            // Synchronize to ensure results are ready
+            cudaStreamSynchronize(stream);
+
+            // Free resources
+            cudaFree(d_leftStringData);
+            cudaFree(d_rightStringData);
+            cudaFree(d_leftOffsets);
+            cudaFree(d_rightOffsets);
+            cudaFree(d_tableSizes);
+            cudaStreamDestroy(stream);
+
+
+
+            
         }
         
-        // Synchronize to ensure results are ready
-        cudaStreamSynchronize(stream);
         
-        // Free resources
-        cudaFree(d_leftCol);
-        cudaFree(d_rightCol);
-        cudaFree(d_tableSizes);
-        cudaStreamDestroy(stream);
+        
 
     }
     
@@ -922,18 +1147,7 @@ __global__ void compareIntColumns(
 
 
 // Helper function for string comparison in device code
-__device__ int compareStrings(const char* str1, const char* str2) {
-    int i = 0;
-    while (str1[i] != '\0' && str2[i] != '\0') {
-        if (str1[i] < str2[i]) return -1;
-        if (str1[i] > str2[i]) return 1;
-        i++;
-    }
-    
-    if (str1[i] == '\0' && str2[i] == '\0') return 0;
-    if (str1[i] == '\0') return -1;
-    return 1;
-}
+
 
 __global__ void compareStringColumns(
     const char* leftStringData,    // Flattened buffer containing all left strings
@@ -1951,13 +2165,11 @@ std::shared_ptr<Table> GPUManager::executeOrderBy(
 
 
 
-    std::vector<GPUManager::SortColumn> GPUManager::parseOrderBy(const Table &table, const std::vector<hsql::OrderDescription *> &order_exprs_){
-
+    std::vector<GPUManager::SortColumn> GPUManager::parseOrderBy(const Table &table, const std::vector<hsql::OrderDescription *> &order_exprs_) {
         std::vector<GPUManager::SortColumn> sort_cols;
         const auto &headers = table.getHeaders();
     
-        for (const auto *order_desc : order_exprs_)
-        {
+        for (const auto *order_desc : order_exprs_) {
             if (order_desc->type != hsql::kOrderAsc && order_desc->type != hsql::kOrderDesc)
                 throw std::runtime_error("Unsupported ORDER BY type");
     
@@ -1965,19 +2177,30 @@ std::shared_ptr<Table> GPUManager::executeOrderBy(
             if (!expr || expr->type != hsql::kExprColumnRef)
                 throw std::runtime_error("Only column references are supported in ORDER BY");
     
-            std::string col_name = expr->name;
+            // Extract column name with optional table alias (e.g., "a.age" -> "a.age")
+            std::string col_name;
+            if (expr->table != nullptr) {
+                col_name = std::string(expr->table) + "." + expr->name;
+            } else {
+                col_name = expr->name;
+            }
+    
+            // Find the column index
             size_t col_idx = table.getColumnIndex(col_name);
-            if (col_idx >= headers.size() || headers[col_idx] != col_name)
-            {
-                // Verify index matches header
-                for (size_t i = 0; i < headers.size(); ++i)
-                {
-                    if (headers[i] == col_name)
-                    {
+    
+            // Fallback: If not found, search by column name only (without alias)
+            if (col_idx >= headers.size() || headers[col_idx] != col_name) {
+                for (size_t i = 0; i < headers.size(); ++i) {
+                    if (headers[i] == expr->name) {  // Check without alias
                         col_idx = i;
                         break;
                     }
                 }
+            }
+    
+            // Validate column existence
+            if (col_idx >= headers.size() || headers[col_idx] != col_name) {
+                throw std::runtime_error("Column '" + col_name + "' not found in table for ORDER BY");
             }
     
             ColumnType col_type = table.getColumnType(col_name);

@@ -123,6 +123,7 @@ public:
     bool isSelectAll(const std::vector<hsql::Expr *> *selectList);
     bool selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList);
     bool hasAggregates(const std::vector<hsql::Expr *> &select_list);
+    bool hasOtherSelectNotAggregates(const std::vector<hsql::Expr *> &select_list);
 
     // Set execution mode (CPU or GPU)
 

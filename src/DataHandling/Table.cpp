@@ -189,7 +189,7 @@ void Table::addColumn(const std::string &columnName, const std::vector<unionV> &
         valueCopy.push_back(copyUnionValue(value, columnType));
     }
 
-    columnData.at(columnName) = std::move(valueCopy);
+    columnData[columnName] = std::move(valueCopy);
 
     // Update headers and indices if this is a new column
     if (columnIndices.find(columnName) == columnIndices.end())

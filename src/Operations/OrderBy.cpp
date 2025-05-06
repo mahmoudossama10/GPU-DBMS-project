@@ -59,6 +59,7 @@ std::shared_ptr<Table> OrderByPlan::execute()
 std::vector<OrderByPlan::SortColumn> OrderByPlan::parseOrderBy(const Table &table) const
 {
     std::vector<SortColumn> sort_cols;
+    const auto &headers = table.getHeaders();
 
     for (const auto *order_desc : order_exprs_)
     {
@@ -69,11 +70,40 @@ std::vector<OrderByPlan::SortColumn> OrderByPlan::parseOrderBy(const Table &tabl
         if (!expr || expr->type != hsql::kExprColumnRef)
             throw std::runtime_error("Only column references are supported in ORDER BY");
 
-        std::string col_name = expr->name;
-        size_t col_idx = table.getColumnIndex(col_name);
-        col_name = table.getHeaders()[col_idx];
-        ColumnType col_type = table.getColumnType(col_name);
+        // Extract column name with optional table alias (e.g., "a.age" -> "a.age")
+        std::string col_name;
+        if (expr->table != nullptr)
+        {
+            col_name = std::string(expr->table) + "." + expr->name;
+        }
+        else
+        {
+            col_name = expr->name;
+        }
 
+        // Find the column index
+        size_t col_idx = table.getColumnIndex(col_name);
+
+        // Fallback: If not found, search by column name only (without alias)
+        if (col_idx >= headers.size() || headers[col_idx] != col_name)
+        {
+            for (size_t i = 0; i < headers.size(); ++i)
+            {
+                if (headers[i] == expr->name)
+                { // Check without alias
+                    col_idx = i;
+                    break;
+                }
+            }
+        }
+
+        // Validate column existence
+        if (col_idx >= headers.size() || headers[col_idx] != col_name)
+        {
+            throw std::runtime_error("Column '" + col_name + "' not found in table for ORDER BY");
+        }
+
+        ColumnType col_type = table.getColumnType(col_name);
         sort_cols.push_back({col_idx, order_desc->type == hsql::kOrderAsc, col_type});
     }
 
