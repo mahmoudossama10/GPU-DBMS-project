@@ -235,8 +235,15 @@ void CommandLineInterface::handleLoadCommand(const std::vector<std::string> &arg
     const std::string &tableName = args[0];
     const std::string &filepath = args[1];
 
+    auto start = high_resolution_clock::now();
+
     storageManager->loadTable(tableName, filepath);
     std::cout << "Loaded table '" << tableName << "' from " << filepath << "\n";
+    auto end = high_resolution_clock::now();
+
+    auto duration = duration_cast<milliseconds>(end - start);
+
+    std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
 }
 
 void CommandLineInterface::handleShowTablesCommand()

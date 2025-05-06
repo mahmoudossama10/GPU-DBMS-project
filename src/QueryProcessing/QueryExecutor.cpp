@@ -352,8 +352,8 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 
     if (plan_builder_->hasAggregates(*(stmt->selectList)))
     {
-        // result = plan_builder_->buildOrderByPlan(result, *stmt->order);
-        result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
+        // result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
+        result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
     }
 
     if (stmt->order && !stmt->order->empty())

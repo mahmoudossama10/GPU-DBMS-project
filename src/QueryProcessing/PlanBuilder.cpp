@@ -287,6 +287,18 @@ std::shared_ptr<Table> GPUOrderByPlan::execute()
     return gpu_manager_->executeOrderBy(input_, order_exprs_);
 }
 
+GPUAggregatorPlan::GPUAggregatorPlan(std::shared_ptr<Table> input, const std::vector<hsql::Expr *> &select_list, std::shared_ptr<GPUManager> gpu_manager)
+    : input_(input), select_list_(select_list), gpu_manager_(gpu_manager) {}
+
+std::shared_ptr<Table> GPUAggregatorPlan::execute()
+{
+    if (!input_ || input_->getData().empty())
+    {
+        return input_;
+    }
+    return gpu_manager_->executeAggregate(input_, select_list_);
+}
+
 GPUJoinPlanMultipleTable::GPUJoinPlanMultipleTable(std::vector<std::unique_ptr<ExecutionPlan>> tables,
                                                    std::string where,
                                                    std::shared_ptr<GPUManager> gpu_manager)
@@ -1180,6 +1192,15 @@ std::shared_ptr<Table> PlanBuilder::buildGPUOrderByPlan(
     const std::vector<hsql::OrderDescription *> &order_exprs)
 {
     auto plan = std::make_unique<GPUOrderByPlan>(input, order_exprs, gpu_manager_);
+    auto result = plan->execute();
+    return result;
+}
+
+std::shared_ptr<Table> PlanBuilder::buildGPUAggregatePlan(
+    std::shared_ptr<Table> input,
+    const std::vector<hsql::Expr *> &select_list)
+{
+    auto plan = std::make_unique<GPUAggregatorPlan>(input, select_list, gpu_manager_);
     auto result = plan->execute();
     return result;
 }

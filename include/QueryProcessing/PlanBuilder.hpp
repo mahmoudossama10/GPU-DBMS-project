@@ -80,6 +80,19 @@ private:
     std::vector<hsql::OrderDescription *> order_exprs_;
     std::shared_ptr<GPUManager> gpu_manager_;
 };
+
+class GPUAggregatorPlan : public ExecutionPlan
+{
+public:
+    GPUAggregatorPlan(std::shared_ptr<Table> input, const std::vector<hsql::Expr *> &select_list, std::shared_ptr<GPUManager> gpu_manager);
+
+    std::shared_ptr<Table> execute() override;
+
+private:
+    std::shared_ptr<Table> input_;
+    std::vector<hsql::Expr *> select_list_;
+    std::shared_ptr<GPUManager> gpu_manager_;
+};
 class GPUJoinPlanMultipleTable : public ExecutionPlan
 {
 public:

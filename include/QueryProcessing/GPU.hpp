@@ -61,11 +61,26 @@ public:
     std::shared_ptr<Table> executeOrderBy(
         std::shared_ptr<Table> table,
         const std::vector<hsql::OrderDescription *> &order_exprs_);
+
+
+        std::shared_ptr<Table> executeAggregate(
+            std::shared_ptr<Table> table,
+            const std::vector<hsql::Expr *> &select_list_);
+
+
     struct SortColumn
     {
         size_t column_index;
         bool is_ascending;
         ColumnType type;
+    };
+
+    struct AggregateOp {
+        std::string function_name;
+        std::string column_name;
+        std::string alias;
+        bool is_distinct;
+        size_t column_index;
     };
 
     std::shared_ptr<Table> output_join_table;
@@ -106,4 +121,10 @@ private:
         const std::vector<std::vector<int>> &selectedIndices);
 
     std::vector<SortColumn> parseOrderBy(const Table &table, const std::vector<hsql::OrderDescription *> &order_exprs_);
+    std::vector<AggregateOp> parseAggregates(const std::vector<hsql::Expr*>& select_list, const Table& table);
+    std::shared_ptr<Table> aggregateTableGPU(const Table& table, const std::vector<AggregateOp>& aggregates);
+    std::string unionValueToString(const unionV& value, ColumnType type);
+
+
+
 };
