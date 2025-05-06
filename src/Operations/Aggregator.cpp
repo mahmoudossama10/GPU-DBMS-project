@@ -114,7 +114,17 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
     {
         result_headers.push_back(op.alias);
         ColumnType col_type = table.getColumnType(op.column_name);
-        result_types[op.alias] = (op.function_name == "count") ? ColumnType::INTEGER : col_type;
+
+        if (op.function_name == "count"){
+            result_types[op.alias] = ColumnType::INTEGER;
+        }
+        else if (op.function_name == "avg") {
+
+            result_types[op.alias] = ColumnType::DOUBLE;
+        }
+        else {
+            result_types[op.alias] = col_type;
+        }
 
         std::vector<unionV> result_col(1);
         if (op.function_name == "count")

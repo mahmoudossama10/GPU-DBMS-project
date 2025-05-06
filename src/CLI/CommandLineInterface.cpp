@@ -182,6 +182,10 @@ void CommandLineInterface::processQuery(const std::string &query)
                         std::cout << *(columnData.at(colName)[rowIdx].s);
                         break;
 
+                    case ColumnType::DOUBLE:
+                    std::cout << columnData.at(colName)[rowIdx].d;
+                    break;
+
                     default:
                         throw std::runtime_error("Unsupported column type");
                     }

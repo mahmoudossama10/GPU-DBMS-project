@@ -268,7 +268,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     // std::vector<std::string> allTableNames = storage_->getTableNames();
 
     // Constant for batch size
-    const size_t BATCH_SIZE = 1000000;
+    const size_t BATCH_SIZE = 60000000;
 
     // Create batched tables from all tables
     for (int i = 0; i < allTableNames.size(); i++)
@@ -352,7 +352,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 
     if (plan_builder_->hasAggregates(*(stmt->selectList)))
     {
-        // result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
+        //result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
         result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
     }
 
