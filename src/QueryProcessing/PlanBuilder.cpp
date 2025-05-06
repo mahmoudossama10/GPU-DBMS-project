@@ -17,6 +17,23 @@ ExecutionMode PlanBuilder::execution_mode_ = ExecutionMode::GPU;
 namespace
 {
 
+    std::string simplifyCastExpressions(const std::string &input)
+    {
+        std::string result = input;
+
+        // Regular expression to match CAST patterns
+        // This pattern captures:
+        // - The column name inside the CAST
+        // - The comparison operator
+        // - The value being compared against
+        std::regex castPattern(R"(CAST\s*\(\s*([a-zA-Z0-9_]+)\s+AS\s+[a-zA-Z0-9_(),.\s]+\)\s*([<>=!]+)\s*([0-9.]+))");
+
+        // Simplify by replacing with "column operator value"
+        result = std::regex_replace(result, castPattern, "$1$2$3");
+
+        return result;
+    }
+
     std::string insertAndBetweenConditions(const std::string &input)
     {
         // Regex to match expressions like: var = value, var >= value, etc.
@@ -843,7 +860,8 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
             }
             if (entry.first == "Filters")
             {
-                filters = insertAndBetweenComparisons(entry.second);
+                filters = simplifyCastExpressions(entry.second);
+                filters = insertAndBetweenComparisons(filters);
             }
         }
         auto table = stmt->fromTable;
@@ -897,6 +915,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
             if (entry.first == "Expressions")
             {
                 filter_condition_string = entry.second;
+                filter_condition_string = simplifyCastExpressions(filter_condition_string);
             }
         }
 
