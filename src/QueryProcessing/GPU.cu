@@ -413,6 +413,104 @@ __global__ void evaluateStringComparisonBatchOptimized(
     }
 }
 
+
+
+
+// New kernel for double comparisons
+__global__ void evaluateDoubleComparisonBatchOptimized(
+    const double* __restrict__ leftColumn,
+    const double* __restrict__ rightColumn,
+    const int* __restrict__ tableSizes,
+    int numTables,
+    int leftTableIdx,
+    int rightTableIdx,
+    int opType,
+    int64_t* __restrict__ results,
+    int batchSize,
+    int leftBatchSize,
+    int rightBatchSize)
+{
+    // Use shared memory for frequently accessed table metadata
+    __shared__ int sharedTableSizes[32]; // Assuming max 32 tables
+    
+    // Load table sizes into shared memory (only first few threads)
+    if (threadIdx.x < numTables) {
+        sharedTableSizes[threadIdx.x] = tableSizes[threadIdx.x];
+    }
+    __syncthreads();
+    
+    // Process multiple elements per thread for better efficiency
+    const int elementsPerThread = 4;
+    const int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // Each thread processes multiple elements
+    for (int i = 0; i < elementsPerThread; i++) {
+        int idx = threadId * elementsPerThread + i;
+        
+        if (idx < batchSize) {
+            // Calculate indices for each table from the flattened index
+            int indices[32]; // Assuming maximum 32 tables
+            int remainingIdx = idx;
+            
+            #pragma unroll 8  // Unroll for common case (up to 8 tables)
+            for (int t = 0; t < numTables; t++) {
+                int tableSize = sharedTableSizes[t];
+                indices[t] = remainingIdx % tableSize;
+                remainingIdx /= tableSize;
+            }
+
+            // Get the actual values to compare from the specific tables
+            double leftValue = leftColumn[indices[leftTableIdx]];
+            double rightValue = rightColumn[indices[rightTableIdx]];
+            
+            // For doubles, handle NaN values correctly
+            // NaN comparisons generally return false except for inequality
+            bool isLeftNaN = isnan(leftValue);
+            bool isRightNaN = isnan(rightValue);
+            
+            // Evaluate the comparison
+            int64_t match;
+            
+            switch (opType) {
+                case 0: // Equals
+                    // For equality, NaN != NaN
+                    if (isLeftNaN || isRightNaN) {
+                        match = (isLeftNaN && isRightNaN) ? 1 : 0;
+                    } else {
+                        match = (fabs(leftValue - rightValue) < 1e-9); // Use epsilon comparison for floating-point
+                    }
+                    break;
+                case 1: // Not Equals
+                    // For inequality, NaN != anything including another NaN
+                    if (isLeftNaN || isRightNaN) {
+                        match = (isLeftNaN && isRightNaN) ? 0 : 1;
+                    } else {
+                        match = (fabs(leftValue - rightValue) >= 1e-9); // Use epsilon comparison
+                    }
+                    break;
+                case 2: // Less Than
+                    // NaN comparisons return false
+                    match = (!isLeftNaN && !isRightNaN && leftValue < rightValue);
+                    break;
+                case 3: // Greater Than
+                    match = (!isLeftNaN && !isRightNaN && leftValue > rightValue);
+                    break;
+                case 4: // Less Than or Equals
+                    match = (!isLeftNaN && !isRightNaN && leftValue <= rightValue);
+                    break;
+                case 5: // Greater Than or Equals
+                    match = (!isLeftNaN && !isRightNaN && leftValue >= rightValue);
+                    break;
+                default:
+                    match = 0;
+            }
+            
+            // Store the result
+            results[idx] = match;
+        }
+    }
+}
+
 // Optimized kernel utilizing shared memory and coalesced access
 __global__ void evaluateComparisonBatchOptimized(
     const int64_t* __restrict__ leftColumn,
@@ -902,7 +1000,74 @@ void GPUManager::evaluateConditionOnBatch(
             cudaFree(d_rightCol);
             cudaFree(d_tableSizes);
             cudaStreamDestroy(stream);
-        }else{
+        }else if (leftTable->getColumnType(leftColName) == ColumnType::DOUBLE && 
+                rightTable->getColumnType(rightColName) == ColumnType::DOUBLE) {
+            // Extract the batch data for the columns we need to compare
+            int leftBatchSize = leftTable->getSize();
+            int rightBatchSize = rightTable->getSize();
+
+            // Get double column data directly from the Table class
+            const auto& leftColumnData = leftTable->getData().at(leftColName);
+            const auto& rightColumnData = rightTable->getData().at(rightColName);
+
+            // Stream for asynchronous operations
+            cudaStream_t stream;
+            cudaStreamCreate(&stream);
+
+            // Allocate device memory
+            double *d_leftCol, *d_rightCol;
+            int* d_tableSizes;
+
+            cudaMalloc(&d_leftCol, leftBatchSize * sizeof(double));
+            cudaMalloc(&d_rightCol, rightBatchSize * sizeof(double));
+
+            // Create table indices information
+            std::vector<int> tableSizes;
+            for (const auto& table : tables) {
+                tableSizes.push_back(table->getSize());
+            }
+        
+            cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
+        
+            // Async memory transfers
+            cudaMemcpyAsync(d_leftCol, leftColumnData.data(), leftBatchSize * sizeof(double), cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_rightCol, rightColumnData.data(), rightBatchSize * sizeof(double), cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice, stream);
+        
+            // Calculate threads needed
+            const int blockSize = 256;
+        
+            // Calculate grid size - we process multiple elements per thread
+            const int elementsPerThread = 4;
+            const int effectiveThreads = (batchSize + elementsPerThread - 1) / elementsPerThread;
+            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
+        
+            // Launch optimized kernel for doubles
+            if(direction == 0){
+                evaluateDoubleComparisonBatchOptimized<<<gridSize, blockSize, 0, stream>>>(
+                    d_leftCol, d_rightCol, 
+                    d_tableSizes, tables.size(),
+                    leftTableIdx, rightTableIdx,
+                    opType, d_leftResults_join, batchSize,
+                    leftBatchSize, rightBatchSize);
+            }else{
+                evaluateDoubleComparisonBatchOptimized<<<gridSize, blockSize, 0, stream>>>(
+                    d_leftCol, d_rightCol, 
+                    d_tableSizes, tables.size(),
+                    leftTableIdx, rightTableIdx,
+                    opType, d_rightResults_join, batchSize,
+                    leftBatchSize, rightBatchSize);
+            }
+        
+            // Synchronize to ensure results are ready
+            cudaStreamSynchronize(stream);
+
+            // Free resources
+            cudaFree(d_leftCol);
+            cudaFree(d_rightCol);
+            cudaFree(d_tableSizes);
+            cudaStreamDestroy(stream);}
+            else {
              // Handle string column comparison
             // Extract the batch data for the columns we need to compare
             int leftBatchSize = leftTable->getSize();
@@ -1099,6 +1264,76 @@ std::vector<std::vector<unionV>> GPUManager::mergeBatchResults(
 //////////////////////////////////////////////////////////////////////////////////////
 
 // New kernel for direct two-table join evaluation
+
+
+
+// CUDA Kernel for Double Comparisons
+__global__ void compareDoubleColumns(
+    const double* leftColumn,
+    const double* rightColumn,
+    int leftSize, 
+    int rightSize,
+    int64_t* results, 
+    int opType,
+    const int* tableSizes,
+    int numTables,
+    int leftTableIdx,
+    int rightTableIdx)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (i < leftSize && j < rightSize) {
+        double leftValue = leftColumn[i];
+        double rightValue = rightColumn[j];
+        
+        // For doubles, handle NaN values correctly
+        // NaN comparisons generally return false except for inequality
+        bool isLeftNaN = isnan(leftValue);
+        bool isRightNaN = isnan(rightValue);
+        
+        // Evaluate the comparison
+        int64_t match;
+        
+        switch (opType) {
+            case 0: // Equals
+                // For equality, NaN != NaN
+                if (isLeftNaN || isRightNaN) {
+                    match = (isLeftNaN && isRightNaN) ? 1 : 0;
+                } else {
+                    match = (fabs(leftValue - rightValue) < 1e-9); // Use epsilon comparison for floating-point
+                }
+                break;
+            case 1: // Not Equals
+                // For inequality, NaN != anything including another NaN
+                if (isLeftNaN || isRightNaN) {
+                    match = (isLeftNaN && isRightNaN) ? 0 : 1;
+                } else {
+                    match = (fabs(leftValue - rightValue) >= 1e-9); // Use epsilon comparison
+                }
+                break;
+            case 2: // Less Than
+                // NaN comparisons return false
+                match = (!isLeftNaN && !isRightNaN && leftValue < rightValue);
+                break;
+            case 3: // Greater Than
+                match = (!isLeftNaN && !isRightNaN && leftValue > rightValue);
+                break;
+            case 4: // Less Than or Equals
+                match = (!isLeftNaN && !isRightNaN && leftValue <= rightValue);
+                break;
+            case 5: // Greater Than or Equals
+                match = (!isLeftNaN && !isRightNaN && leftValue >= rightValue);
+                break;
+            default:
+                match = 0;
+        }
+        
+        int flatIndex = i * tableSizes[1] + j;
+        results[flatIndex] = match;
+    }
+}
+
 
 __global__ void compareIntColumns(
     const int64_t*  leftColumn,
@@ -1456,95 +1691,141 @@ void GPUManager::evaluateTwoTableJoinCondition(
             cudaFree(d_rightColumn);
             cudaFree(d_tableSizes);  // Add this line
         }
-        else if (leftTable->getColumnType(leftColName) == ColumnType::STRING && 
-        rightTable->getColumnType(rightColName) == ColumnType::STRING){
-            // Calculate total size needed for string data and create offsets arrays
-            std::vector<int> leftOffsets(leftSize);
-            std::vector<int> rightOffsets(rightSize);
+        else if (leftTable->getColumnType(leftColName) == ColumnType::DOUBLE && 
+        rightTable->getColumnType(rightColName) == ColumnType::DOUBLE){
+            // Allocate GPU memory
+            double *d_leftColumn, *d_rightColumn;
                 
-            int leftTotalSize = 0;
-            int rightTotalSize = 0;
-                
-            // Calculate offsets and total sizes
-            for (int i = 0; i < leftSize; i++) {
-                leftOffsets[i] = leftTotalSize;
-                leftTotalSize += leftColumnData[i].s->length() + 1; // +1 for null terminator
-            }
-            
-            for (int j = 0; j < rightSize; j++) {
-                rightOffsets[j] = rightTotalSize;
-                rightTotalSize += rightColumnData[j].s->length() + 1; // +1 for null terminator
-            }
-            
-            // Create flattened host buffers for string data
-            std::vector<char> leftStringData(leftTotalSize);
-            std::vector<char> rightStringData(rightTotalSize);
-            
-            // Copy string data to flattened buffers
-            for (int i = 0; i < leftSize; i++) {
-                const std::string& str = *(leftColumnData[i].s);
-                std::memcpy(&leftStringData[leftOffsets[i]], str.c_str(), str.length() + 1);
-            }
-            
-            for (int j = 0; j < rightSize; j++) {
-                const std::string& str = *(rightColumnData[j].s);
-                std::memcpy(&rightStringData[rightOffsets[j]], str.c_str(), str.length() + 1);
-            }
-            
-            // Allocate device memory
-            char* d_leftStringData;
-            char* d_rightStringData;
-            int* d_leftOffsets;
-            int* d_rightOffsets;
-            int* d_tableSizes;
-            
-            // Allocate memory on device
-            cudaMalloc(&d_leftStringData, leftTotalSize * sizeof(char));
-            cudaMalloc(&d_rightStringData, rightTotalSize * sizeof(char));
-            cudaMalloc(&d_leftOffsets, leftSize * sizeof(int));
-            cudaMalloc(&d_rightOffsets, rightSize * sizeof(int));
-            cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
-            
-            // Copy data to device in a single operation per array
-            cudaMemcpy(d_leftStringData, leftStringData.data(), leftTotalSize * sizeof(char),
-                       cudaMemcpyHostToDevice);
-            cudaMemcpy(d_rightStringData, rightStringData.data(), rightTotalSize * sizeof(char),
-                       cudaMemcpyHostToDevice);
-            cudaMemcpy(d_leftOffsets, leftOffsets.data(), leftSize * sizeof(int),
-                       cudaMemcpyHostToDevice);
-            cudaMemcpy(d_rightOffsets, rightOffsets.data(), rightSize * sizeof(int),
-                       cudaMemcpyHostToDevice);
-            cudaMemcpy(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int),
-                       cudaMemcpyHostToDevice);
-            
+            int *d_tableSizes;  // Add this line
+
+            cudaMalloc(&d_leftColumn, leftSize * sizeof(double));
+            cudaMalloc(&d_rightColumn, rightSize * sizeof(double));
+            cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));  // Add this line
+
+            // Copy data to GPU
+            cudaMemcpy(d_leftColumn, leftColumnData.data(), leftSize * sizeof(double), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_rightColumn, rightColumnData.data(), rightSize * sizeof(double), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice);  // Add this line
+
+            // Calculate grid and block dimensions
+            int blockSize = 256;
+            int numBlocks = std::min(65535, (totalCombinations + blockSize - 1) / blockSize);
+
             // Launch kernel with 2D grid/block configuration
             dim3 blockDim(16, 16);
             dim3 gridDim(
                 (leftSize + blockDim.x - 1) / blockDim.x,
                 (rightSize + blockDim.y - 1) / blockDim.y
             );
-            
+
             if (direction == 0){
-            compareStringColumns<<<gridDim, blockDim>>>(
-                d_leftStringData, d_rightStringData,
-                d_leftOffsets, d_rightOffsets,
-                leftSize, rightSize,
-                d_leftResults_join, opType, d_tableSizes, 2, 0, 1);
+            compareDoubleColumns<<<gridDim, blockDim>>>(
+                d_leftColumn, d_rightColumn, 
+                leftSize, rightSize, 
+                d_leftResults_join, opType, d_tableSizes, 2, 0, 1);  // Use d_tableSizes instead of tableSizes.data()
             }else{
+                compareDoubleColumns<<<gridDim, blockDim>>>(
+                    d_leftColumn, d_rightColumn, 
+                    leftSize, rightSize, 
+                    d_rightResults_join, opType, d_tableSizes, 2, 0, 1);  // Use d_tableSizes instead of tableSizes.data()
+            }
+            // Copy results back to host
+            // cudaMemcpy(results.data(), d_results, totalCombinations * sizeof(int64_t), cudaMemcpyDeviceToHost);
+            
+            // Free GPU memory
+            cudaFree(d_leftColumn);
+            cudaFree(d_rightColumn);
+            cudaFree(d_tableSizes);  // Add this line
+        }else{
+            {
+                // Calculate total size needed for string data and create offsets arrays
+                std::vector<int> leftOffsets(leftSize);
+                std::vector<int> rightOffsets(rightSize);
+                    
+                int leftTotalSize = 0;
+                int rightTotalSize = 0;
+                    
+                // Calculate offsets and total sizes
+                for (int i = 0; i < leftSize; i++) {
+                    leftOffsets[i] = leftTotalSize;
+                    leftTotalSize += leftColumnData[i].s->length() + 1; // +1 for null terminator
+                }
+                
+                for (int j = 0; j < rightSize; j++) {
+                    rightOffsets[j] = rightTotalSize;
+                    rightTotalSize += rightColumnData[j].s->length() + 1; // +1 for null terminator
+                }
+                
+                // Create flattened host buffers for string data
+                std::vector<char> leftStringData(leftTotalSize);
+                std::vector<char> rightStringData(rightTotalSize);
+                
+                // Copy string data to flattened buffers
+                for (int i = 0; i < leftSize; i++) {
+                    const std::string& str = *(leftColumnData[i].s);
+                    std::memcpy(&leftStringData[leftOffsets[i]], str.c_str(), str.length() + 1);
+                }
+                
+                for (int j = 0; j < rightSize; j++) {
+                    const std::string& str = *(rightColumnData[j].s);
+                    std::memcpy(&rightStringData[rightOffsets[j]], str.c_str(), str.length() + 1);
+                }
+                
+                // Allocate device memory
+                char* d_leftStringData;
+                char* d_rightStringData;
+                int* d_leftOffsets;
+                int* d_rightOffsets;
+                int* d_tableSizes;
+                
+                // Allocate memory on device
+                cudaMalloc(&d_leftStringData, leftTotalSize * sizeof(char));
+                cudaMalloc(&d_rightStringData, rightTotalSize * sizeof(char));
+                cudaMalloc(&d_leftOffsets, leftSize * sizeof(int));
+                cudaMalloc(&d_rightOffsets, rightSize * sizeof(int));
+                cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
+                
+                // Copy data to device in a single operation per array
+                cudaMemcpy(d_leftStringData, leftStringData.data(), leftTotalSize * sizeof(char),
+                           cudaMemcpyHostToDevice);
+                cudaMemcpy(d_rightStringData, rightStringData.data(), rightTotalSize * sizeof(char),
+                           cudaMemcpyHostToDevice);
+                cudaMemcpy(d_leftOffsets, leftOffsets.data(), leftSize * sizeof(int),
+                           cudaMemcpyHostToDevice);
+                cudaMemcpy(d_rightOffsets, rightOffsets.data(), rightSize * sizeof(int),
+                           cudaMemcpyHostToDevice);
+                cudaMemcpy(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int),
+                           cudaMemcpyHostToDevice);
+                
+                // Launch kernel with 2D grid/block configuration
+                dim3 blockDim(16, 16);
+                dim3 gridDim(
+                    (leftSize + blockDim.x - 1) / blockDim.x,
+                    (rightSize + blockDim.y - 1) / blockDim.y
+                );
+                
+                if (direction == 0){
                 compareStringColumns<<<gridDim, blockDim>>>(
                     d_leftStringData, d_rightStringData,
                     d_leftOffsets, d_rightOffsets,
                     leftSize, rightSize,
-                    d_rightResults_join, opType, d_tableSizes, 2, 0, 1);
+                    d_leftResults_join, opType, d_tableSizes, 2, 0, 1);
+                }else{
+                    compareStringColumns<<<gridDim, blockDim>>>(
+                        d_leftStringData, d_rightStringData,
+                        d_leftOffsets, d_rightOffsets,
+                        leftSize, rightSize,
+                        d_rightResults_join, opType, d_tableSizes, 2, 0, 1);
+                }
+    
+                
+                // Free device memory
+                cudaFree(d_leftStringData);
+                cudaFree(d_rightStringData);
+                cudaFree(d_leftOffsets);
+                cudaFree(d_rightOffsets);
+                cudaFree(d_tableSizes);
             }
-
-            
-            // Free device memory
-            cudaFree(d_leftStringData);
-            cudaFree(d_rightStringData);
-            cudaFree(d_leftOffsets);
-            cudaFree(d_rightOffsets);
-            cudaFree(d_tableSizes);
         }
        
     }
