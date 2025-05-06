@@ -109,6 +109,8 @@ public:
     explicit PlanBuilder(std::shared_ptr<StorageManager> storage, ExecutionMode mode = ExecutionMode::GPU);
     bool isSelectAll(const std::vector<hsql::Expr *> *selectList);
     bool selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList);
+    bool hasAggregates(const std::vector<hsql::Expr *> &select_list);
+
     // Set execution mode (CPU or GPU)
 
     // Main build method
@@ -132,6 +134,14 @@ public:
     std::shared_ptr<Table> buildGPUOrderByPlan(
         std::shared_ptr<Table> input,
         const std::vector<hsql::OrderDescription *> &order_exprs);
+
+    std::shared_ptr<Table> buildCPUAggregatePlan(
+        std::shared_ptr<Table> input,
+        const std::vector<hsql::Expr *> &select_list);
+
+    std::shared_ptr<Table> buildGPUAggregatePlan(
+        std::shared_ptr<Table> input,
+        const std::vector<hsql::Expr *> &select_list);
 
     static std::shared_ptr<Table> output_join_table;
     static int joinPlansCount;

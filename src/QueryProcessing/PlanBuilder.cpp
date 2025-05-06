@@ -104,16 +104,6 @@ namespace
         return *end == '\0';
     }
 
-    bool hasAggregates(const std::vector<hsql::Expr *> &select_list)
-    {
-        for (auto *expr : select_list)
-        {
-            if (expr->type == hsql::kExprFunctionRef)
-                return true;
-        }
-        return false;
-    }
-
     // Helper function to check if an expression contains a subquery
     bool hasSubquery(const hsql::Expr *expr)
     {
@@ -424,6 +414,15 @@ bool PlanBuilder::isSelectAll(const std::vector<hsql::Expr *> *selectList)
     return false;
 }
 
+bool PlanBuilder::hasAggregates(const std::vector<hsql::Expr *> &select_list)
+{
+    for (auto *expr : select_list)
+    {
+        if (expr->type == hsql::kExprFunctionRef)
+            return true;
+    }
+    return false;
+}
 bool PlanBuilder::selectListNeedsProjection(const std::vector<hsql::Expr *> &selectList)
 {
     // If * present, never project
@@ -998,15 +997,10 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
         break;
     }
-    case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
-    {
-        plan = buildPassPlane(std::move(children[0]));
-
-        break;
-    }
     // Add other operator types as needed
     default:
-        throw SemanticError("Unsupported DuckDB operator type");
+        plan = buildPassPlane(std::move(children[0]));
+
         // plan = buildProjectPlan(std::move(children[0]), *(stmt->selectList));
 
         break;
@@ -1186,6 +1180,15 @@ std::shared_ptr<Table> PlanBuilder::buildGPUOrderByPlan(
     const std::vector<hsql::OrderDescription *> &order_exprs)
 {
     auto plan = std::make_unique<GPUOrderByPlan>(input, order_exprs, gpu_manager_);
+    auto result = plan->execute();
+    return result;
+}
+
+std::shared_ptr<Table> PlanBuilder::buildCPUAggregatePlan(
+    std::shared_ptr<Table> input,
+    const std::vector<hsql::Expr *> &select_list)
+{
+    auto plan = std::make_unique<AggregatorPlan>(input, select_list);
     auto result = plan->execute();
     return result;
 }

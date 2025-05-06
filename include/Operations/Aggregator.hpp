@@ -1,41 +1,33 @@
-// #pragma once
-// #include "../DataHandling/Table.hpp"
-// #include "../QueryProcessing/PlanBuilder.hpp"
-// #include <hsql/SQLParser.h>
-// #include <memory>
-// #include <vector>
-// #include <string>
-// #include <unordered_map>
+#pragma once
 
-// class AggregatorPlan : public ExecutionPlan {
-// public:
-//     AggregatorPlan(std::unique_ptr<ExecutionPlan> input,
-//                    const std::vector<hsql::Expr*>& aggregate_exprs);
+#include "../../include/DataHandling/Table.hpp"
+#include "../../include/QueryProcessing/PlanBuilder.hpp"
+#include <hsql/util/sqlhelper.h>
+#include <memory>
+#include <vector>
+#include <string>
 
-//     std::shared_ptr<Table> execute() override;
+class AggregatorPlan : public ExecutionPlan
+{
+public:
+    AggregatorPlan(std::shared_ptr<Table> input, const std::vector<hsql::Expr *> &select_list);
+    std::shared_ptr<Table> execute() override;
 
-// private:
-//     std::unique_ptr<ExecutionPlan> input_;
-//     std::vector<hsql::Expr*> aggregate_exprs_;
+private:
+    struct AggregateOp
+    {
+        std::string function_name;
+        std::string column_name;
+        std::string alias;
+        bool is_distinct;
+    };
 
-//     // Helper structures
-//     struct AggregateInfo {
-//         enum class AggType { COUNT, SUM, AVG, MAX, MIN };
-//         AggType type;
-//         std::string column;  // Column to aggregate (empty for COUNT(*))
-//         std::string alias;
-//     };
-//     std::string aggToString(AggregateInfo::AggType type) const;
+    std::vector<AggregateOp> parseAggregates(const std::vector<hsql::Expr *> &select_list, const Table &table);
+    std::shared_ptr<Table> aggregateTable(const Table &table, const std::vector<AggregateOp> &aggregates);
 
-//     // Key utilities
-//     std::vector<AggregateInfo> parseAggregateExpressions() const;
-//     std::string getColumnName(const hsql::Expr* expr) const;
-//     double numericColumnSafeGet(const Table& table, const std::string& column) const;
+    // Helper to convert unionV to string
+    std::string unionValueToString(const unionV &value, ColumnType type);
 
-//     // Computation functions
-//     double computeSum(const Table& table, const std::string& column) const;
-//     double computeAvg(const Table& table, const std::string& column) const;
-//     double computeMax(const Table& table, const std::string& column) const;
-//     double computeMin(const Table& table, const std::string& column) const;
-//     int computeCount(const Table& table, const std::string& column) const;
-// };
+    std::shared_ptr<Table> input_;
+    std::vector<hsql::Expr *> select_list_;
+};
