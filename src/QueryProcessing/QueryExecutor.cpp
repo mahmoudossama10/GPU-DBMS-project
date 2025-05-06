@@ -49,7 +49,7 @@ SubqueryInfo QueryExecutor::extractSubquery(const std::string &query)
                 }
 
                 // Check if the subquery comes after IN keyword following WHERE
-                std::regex whereInPattern(R"(WHERE\s+.*\bIN\s*$|WHERE\s+.*\bIN\s+.*?[^\w])");
+                std::regex whereInPattern(R"(\bWHERE\b)");
                 if (std::regex_search(beforeSubquery, whereInPattern))
                 {
                     result.after_where_in = true;
@@ -170,7 +170,23 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
             resultTable->headers = strippedHeaders;
         }
 
-        if (subQuery.after_from)
+        if (subQuery.after_where_in)
+        {
+            auto aggValue = resultTable->getRow(0)[0];
+            auto aggType = resultTable->getColumnType(resultTable->headers[0]);
+
+            // Create a deep copy of the union value if needed
+            auto stringValue = UnionUtils::valueToString(aggValue, aggType);
+
+            std::string toReplace = "sub_query";
+
+            size_t pos = subQuery.modified_query.find(toReplace);
+            if (pos != std::string::npos)
+            {
+                subQuery.modified_query.replace(pos, toReplace.length(), stringValue);
+            }
+        }
+        else
         {
             std::string oldName = resultTable->getName();
             std::string newName = "sub_query";
@@ -186,22 +202,6 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
                 resultTable->tableName = "sub_query";
                 storage_->addTable(resultTable);
                 storage_->tables.at("sub_query")->setAlias(subQuery.alias);
-            }
-        }
-        else
-        {
-            auto aggValue = resultTable->getRow(0)[0];
-            auto aggType = resultTable->getColumnType(resultTable->headers[0]);
-
-            // Create a deep copy of the union value if needed
-            auto stringValue = UnionUtils::valueToString(aggValue, aggType);
-
-            std::string toReplace = "sub_query";
-
-            size_t pos = subQuery.modified_query.find(toReplace);
-            if (pos != std::string::npos)
-            {
-                subQuery.modified_query.replace(pos, toReplace.length(), stringValue);
             }
         }
 
@@ -352,8 +352,8 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 
     if (plan_builder_->hasAggregates(*(stmt->selectList)))
     {
-        // result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
-        result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
+        result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
+        // result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
     }
 
     if (stmt->order && !stmt->order->empty())
