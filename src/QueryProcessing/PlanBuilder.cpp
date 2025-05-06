@@ -13,7 +13,7 @@
 
 std::shared_ptr<Table> PlanBuilder::output_join_table = nullptr;
 int PlanBuilder::joinPlansCount = 0;
-ExecutionMode PlanBuilder::execution_mode_ = ExecutionMode::CPU;
+ExecutionMode PlanBuilder::execution_mode_ = ExecutionMode::GPU;
 namespace
 {
 
@@ -435,7 +435,6 @@ bool PlanBuilder::hasAggregates(const std::vector<hsql::Expr *> &select_list)
     }
     return false;
 }
-
 
 bool PlanBuilder::hasOtherSelectNotAggregates(const std::vector<hsql::Expr *> &select_list)
 {

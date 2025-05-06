@@ -357,7 +357,11 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     // std::vector<std::string> allTableNames = storage_->getTableNames();
 
     // Constant for batch size
-    const size_t BATCH_SIZE = 500;
+    size_t BATCH_SIZE = 500;
+    if (allTableNamesOriginal.size() == 1)
+    {
+        BATCH_SIZE = storage_->getTable(allTableNamesOriginal[0]).getSize();
+    }
 
     // Create batched tables from all tables
     for (int i = 0; i < allTableNames.size(); i++)
@@ -449,16 +453,26 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     std::shared_ptr<Table> aggResult;
     if (plan_builder_->hasAggregates(*(stmt->selectList)))
     {
-        // result = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
-        // result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
-        aggResult = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
-        // result = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
+        if (PlanBuilder::execution_mode_ == ExecutionMode::CPU)
+        {
+            aggResult = plan_builder_->buildCPUAggregatePlan(result, *(stmt->selectList));
+        }
+        else
+        {
+            aggResult = plan_builder_->buildGPUAggregatePlan(result, *(stmt->selectList));
+        }
     }
 
     if (stmt->order && !stmt->order->empty())
     {
-        // result = plan_builder_->buildOrderByPlan(result, *stmt->order);
-        result = plan_builder_->buildGPUOrderByPlan(result, *stmt->order);
+        if (PlanBuilder::execution_mode_ == ExecutionMode::CPU)
+        {
+            result = plan_builder_->buildOrderByPlan(result, *stmt->order);
+        }
+        else
+        {
+            result = plan_builder_->buildGPUOrderByPlan(result, *stmt->order);
+        }
     }
 
     if (!plan_builder_->isSelectAll(stmtWithoutAgg->selectList) && plan_builder_->selectListNeedsProjection(*(stmtWithoutAgg->selectList)))
@@ -503,6 +517,10 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 
         // Create the new table using the accumulated data
         result = std::make_shared<Table>("final_result_large", newHeaders, newColumnData, newColumnTypes);
+    }
+    else if (plan_builder_->hasAggregates(*(stmt->selectList)))
+    {
+        result = aggResult;
     }
 
     // result = plan_builder_->buildOrderByPlan(result, *stmt->order);

@@ -164,10 +164,10 @@ public:
     {
         PlanBuilder::execution_mode_ = mode;
     }
+    static ExecutionMode execution_mode_;
 
 private:
     std::shared_ptr<StorageManager> storage_;
-    static ExecutionMode execution_mode_;
     std::shared_ptr<GPUManager> gpu_manager_;
 
     // Subquery processing
