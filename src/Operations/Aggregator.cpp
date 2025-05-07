@@ -103,9 +103,9 @@ std::string AggregatorPlan::unionValueToString(const unionV &value, ColumnType t
     case ColumnType::STRING:
         return *(value.s);
     case ColumnType::INTEGER:
-        return std::to_string(value.i);
+        return std::to_string(value.i->value);
     case ColumnType::DOUBLE:
-        return std::to_string(value.d);
+        return std::to_string(value.d->value);
     case ColumnType::DATETIME:
     {
         char buffer[64];
@@ -152,6 +152,8 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
         }
 
         std::vector<unionV> result_col(1);
+        result_col[0].i = new TheInteger();
+        result_col[0].d = new TheDouble();
         if (op.function_name == "count")
         {
             if (op.is_distinct)
@@ -191,11 +193,11 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
                     }
                     unique_values.insert(val_str);
                 }
-                result_col[0].i = unique_values.size();
+                result_col[0].i->value = unique_values.size();
             }
             else
             {
-                result_col[0].i = num_rows;
+                result_col[0].i->value = num_rows;
             }
         }
         else if (op.function_name == "sum" || op.function_name == "avg")
@@ -234,11 +236,11 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
             }
             if (col_type == ColumnType::INTEGER && op.function_name != "avg")
             {
-                result_col[0].i = static_cast<int64_t>(total);
+                result_col[0].i->value = static_cast<int64_t>(total);
             }
             else
             {
-                result_col[0].d = total;
+                result_col[0].d->value = total;
             }
         }
         else if (op.function_name == "min" || op.function_name == "max")
@@ -290,7 +292,7 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
                         extreme = val;
                     }
                 }
-                result_col[0].i = extreme;
+                result_col[0].i->value = extreme;
             }
             else if (col_type == ColumnType::DOUBLE)
             {
@@ -319,7 +321,7 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
                         extreme = val;
                     }
                 }
-                result_col[0].d = extreme;
+                result_col[0].d->value = extreme;
             }
             else if (col_type == ColumnType::DATETIME)
             {

@@ -22,13 +22,24 @@ enum class ColumnType
     DATETIME
 };
 
+struct TheInteger
+{
+    int64_t value;
+    bool is_null;
+};
+
+struct TheDouble
+{
+    double value;
+    bool is_null = false;
+};
+
 union unionV
 {
     std::string *s;
-    int64_t i;
-    double d;
+    TheInteger *i;
+    TheDouble *d;
     dateTime *t;
-    bool is_null = false;
 };
 
 namespace UnionUtils

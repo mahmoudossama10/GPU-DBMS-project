@@ -171,11 +171,11 @@ namespace
             break;
 
         case ColumnType::INTEGER:
-            result.i = std::stoll(value);
+            result.i->value = std::stoll(value);
             break;
 
         case ColumnType::DOUBLE:
-            result.d = std::stod(value);
+            result.d->value = std::stod(value);
             break;
 
         case ColumnType::DATETIME:
@@ -206,10 +206,10 @@ namespace
             return *(value.s);
 
         case ColumnType::INTEGER:
-            return std::to_string(value.i);
+            return std::to_string(value.i->value);
 
         case ColumnType::DOUBLE:
-            return std::to_string(value.d);
+            return std::to_string(value.d->value);
 
         case ColumnType::DATETIME:
         {

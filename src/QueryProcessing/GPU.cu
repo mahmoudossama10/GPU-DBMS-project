@@ -2440,13 +2440,13 @@ std::shared_ptr<Table> GPUManager::executeOrderBy(
             switch (col_type)
             {
             case ColumnType::INTEGER:
-                int_data[flat_idx] = val.i;
+                int_data[flat_idx] = val.i->value;
                 break;
             case ColumnType::DOUBLE:
-                double_data[flat_idx] = val.d;
+                double_data[flat_idx] = val.d->value;
                 break;
             case ColumnType::DATETIME:
-                double_data[flat_idx] = val.d; // Handle DATETIME as DOUBLE
+                double_data[flat_idx] = val.d->value; // Handle DATETIME as DOUBLE
                 break;
             case ColumnType::STRING:
             {
@@ -2669,9 +2669,9 @@ std::string GPUManager::unionValueToString(const unionV &value, ColumnType type)
     case ColumnType::STRING:
         return *(value.s);
     case ColumnType::INTEGER:
-        return std::to_string(value.i);
+        return std::to_string(value.i->value);
     case ColumnType::DOUBLE:
-        return std::to_string(value.d);
+        return std::to_string(value.d->value);
     case ColumnType::DATETIME:
     {
         char buffer[64];
@@ -2732,6 +2732,8 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
         }
 
         std::vector<unionV> result_col(1);
+        result_col[0].i = new TheInteger();
+        result_col[0].d = new TheDouble();
         if (op.function_name == "count")
         {
             if (op.is_distinct)
@@ -2771,11 +2773,11 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
                     }
                     unique_values.insert(val_str);
                 }
-                result_col[0].i = unique_values.size();
+                result_col[0].i->value = unique_values.size();
             }
             else
             {
-                result_col[0].i = num_rows;
+                result_col[0].i->value = num_rows;
             }
         }
         else if (col_type == ColumnType::STRING)
@@ -2838,11 +2840,11 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
                 }
                 if (col_type == ColumnType::INTEGER && op.function_name != "avg")
                 {
-                    result_col[0].i = static_cast<int64_t>(total);
+                    result_col[0].i->value = static_cast<int64_t>(total);
                 }
                 else
                 {
-                    result_col[0].d = total;
+                    result_col[0].d->value = total;
                 }
             }
             else if (op.function_name == "min" || op.function_name == "max")
@@ -2866,11 +2868,11 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
                 }
                 if (col_type == ColumnType::INTEGER)
                 {
-                    result_col[0].i = static_cast<int64_t>(extreme);
+                    result_col[0].i->value = static_cast<int64_t>(extreme);
                 }
                 else
                 {
-                    result_col[0].d = extreme;
+                    result_col[0].d->value = extreme;
                 }
             }
         }

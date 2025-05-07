@@ -73,7 +73,9 @@ void Table::freeUnionMemory(unionV &value, ColumnType type)
 
 unionV Table::copyUnionValue(const unionV &value, ColumnType type)
 {
-    unionV copy;
+    unionV copy = {};
+    copy.i = new TheInteger();
+    copy.d = new TheDouble();
 
     switch (type)
     {
@@ -81,10 +83,12 @@ unionV Table::copyUnionValue(const unionV &value, ColumnType type)
         copy.s = (value.s != nullptr) ? new std::string(*value.s) : nullptr;
         break;
     case ColumnType::INTEGER:
-        copy.i = value.i;
+        copy.i->value = value.i->value;
+        copy.i->is_null = value.i->is_null;
         break;
     case ColumnType::DOUBLE:
-        copy.d = value.d;
+        copy.d->value = value.d->value;
+        copy.d->is_null = value.d->is_null;
         break;
     case ColumnType::DATETIME:
         if (value.t != nullptr)
@@ -104,7 +108,9 @@ unionV Table::copyUnionValue(const unionV &value, ColumnType type)
 
 unionV Table::stringToUnion(const std::string &str, ColumnType type)
 {
-    unionV result;
+    unionV result = {};
+    result.i = new TheInteger();
+    result.d = new TheDouble();
 
     switch (type)
     {
@@ -114,7 +120,7 @@ unionV Table::stringToUnion(const std::string &str, ColumnType type)
     case ColumnType::INTEGER:
         try
         {
-            result.i = std::stoll(str);
+            result.i->value = std::stoll(str);
         }
         catch (...)
         {
@@ -124,7 +130,7 @@ unionV Table::stringToUnion(const std::string &str, ColumnType type)
     case ColumnType::DOUBLE:
         try
         {
-            result.d = std::stod(str);
+            result.d->value = std::stod(str);
         }
         catch (...)
         {
@@ -351,9 +357,9 @@ int64_t Table::getInteger(const std::string &columnName, int rowIndex) const
         throw std::runtime_error("Column '" + columnName + "' is not an integer column");
     }
     auto cell = columnData.at(columnName)[rowIndex];
-    if (cell.is_null == true)
+    if (cell.i->is_null == true)
         throw std::runtime_error("NULL");
-    return cell.i;
+    return cell.i->value;
 }
 
 double Table::getDouble(const std::string &columnName, int rowIndex) const
@@ -371,9 +377,9 @@ double Table::getDouble(const std::string &columnName, int rowIndex) const
     }
 
     auto cell = columnData.at(columnName)[rowIndex];
-    if (cell.is_null == true)
+    if (cell.d->is_null == true)
         throw std::runtime_error("NULL");
-    return cell.d;
+    return cell.d->value;
 }
 
 const dateTime &Table::getDateTime(const std::string &columnName, int rowIndex) const
@@ -467,10 +473,10 @@ const std::vector<int> &Table::getIntColumn(const std::string &colName) const
                 }
                 break;
             case ColumnType::INTEGER:
-                values.push_back(static_cast<int>(unionValue.i));
+                values.push_back(static_cast<int>(unionValue.i->value));
                 break;
             case ColumnType::DOUBLE:
-                values.push_back(static_cast<int>(unionValue.d));
+                values.push_back(static_cast<int>(unionValue.d->value));
                 break;
             case ColumnType::DATETIME:
                 // For datetime, we'll use the year as an integer (just as an example)

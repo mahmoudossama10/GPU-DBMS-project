@@ -120,25 +120,50 @@ std::shared_ptr<Table> Filter::apply(
                 {
                 case ColumnType::STRING:
                 {
-                    std::string *newStr = new std::string(*(value.s));
-                    unionV newValue;
-                    newValue.s = newStr;
-                    filteredColumnData[header].push_back(newValue);
+                    unionV copy = {};
+                    copy.i = new TheInteger();
+                    copy.d = new TheDouble();
+                    copy.s = (value.s != nullptr) ? new std::string(*value.s) : nullptr;
+                    filteredColumnData[header].push_back(copy);
                 }
                 break;
                 case ColumnType::DATETIME:
                 {
-                    dateTime *newTime = new dateTime(*(value.t));
-                    unionV newValue;
-                    newValue.t = newTime;
-                    filteredColumnData[header].push_back(newValue);
+                    unionV copy = {};
+                    copy.i = new TheInteger();
+                    copy.d = new TheDouble();
+                    if (value.t != nullptr)
+                    {
+                        copy.t = new dateTime;
+                        *copy.t = *value.t;
+                    }
+                    else
+                    {
+                        copy.t = nullptr;
+                    }
+                    filteredColumnData[header].push_back(copy);
                 }
                 break;
                 case ColumnType::INTEGER:
+                {
+                    unionV copy = {};
+                    copy.i = new TheInteger();
+                    copy.d = new TheDouble();
+                    copy.i->value = value.i->value;
+                    copy.i->is_null = value.i->is_null;
+                    filteredColumnData[header].push_back(copy);
+                }
+                break;
                 case ColumnType::DOUBLE:
-                    // These don't need deep copy
-                    filteredColumnData[header].push_back(value);
-                    break;
+                {
+                    unionV copy = {};
+                    copy.i = new TheInteger();
+                    copy.d = new TheDouble();
+                    copy.d->value = value.d->value;
+                    copy.d->is_null = value.d->is_null;
+                    filteredColumnData[header].push_back(copy);
+                }
+                break;
                 }
             }
         }
@@ -250,12 +275,12 @@ unionV Filter::getExprValue(
     else if (expr->type == hsql::kExprLiteralInt)
     {
         outType = ColumnType::INTEGER;
-        result.i = expr->ival;
+        result.i->value = expr->ival;
     }
     else if (expr->type == hsql::kExprLiteralFloat)
     {
         outType = ColumnType::DOUBLE;
-        result.d = expr->fval;
+        result.d->value = expr->fval;
     }
     else if (expr->type == hsql::kExprLiteralString)
     {
@@ -282,7 +307,7 @@ std::string Filter::unionToString(const unionV &value, ColumnType type)
         ss << value.i;
         return ss.str();
     case ColumnType::DOUBLE:
-        ss << value.d;
+        ss << value.d->value;
         return ss.str();
     case ColumnType::DATETIME:
     {
@@ -326,8 +351,8 @@ bool Filter::handleComparison(
             (lhsType == ColumnType::DOUBLE && rhsType == ColumnType::INTEGER))
         {
             // Convert to double comparison
-            double lhsDouble = (lhsType == ColumnType::INTEGER) ? static_cast<double>(lhsValue.i) : lhsValue.d;
-            double rhsDouble = (rhsType == ColumnType::INTEGER) ? static_cast<double>(rhsValue.i) : rhsValue.d;
+            double lhsDouble = (lhsType == ColumnType::INTEGER) ? static_cast<double>(lhsValue.i->value) : lhsValue.d->value;
+            double rhsDouble = (rhsType == ColumnType::INTEGER) ? static_cast<double>(rhsValue.i->value) : rhsValue.d->value;
             return compareDoubles(lhsDouble, rhsDouble, expr->opType);
         }
         else
@@ -358,11 +383,11 @@ bool Filter::handleComparison(
     break;
 
     case ColumnType::INTEGER:
-        result = compareIntegers(lhsValue.i, rhsValue.i, expr->opType);
+        result = compareIntegers(lhsValue.i->value, rhsValue.i->value, expr->opType);
         break;
 
     case ColumnType::DOUBLE:
-        result = compareDoubles(lhsValue.d, rhsValue.d, expr->opType);
+        result = compareDoubles(lhsValue.d->value, rhsValue.d->value, expr->opType);
         break;
 
     case ColumnType::DATETIME:
@@ -619,7 +644,7 @@ bool Filter::handleNullCondition(
         // Maybe use a special value for NULL integers?
         return false; // Need to define what constitutes NULL for integers
     case ColumnType::DOUBLE:
-        return std::isnan(columnData[rowIndex].d);
+        return std::isnan(columnData[rowIndex].d->value);
     case ColumnType::DATETIME:
         return columnData[rowIndex].t == nullptr;
     default:

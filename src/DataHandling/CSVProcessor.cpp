@@ -257,7 +257,9 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 
         {
 
-            unionV value;
+            unionV value = {};
+            value.i = new TheInteger();
+            value.d = new TheDouble();
 
             switch (types[col])
 
@@ -269,15 +271,15 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 
                 {
 
-                    value.i = std::stoll(vals[col]);
+                    value.i->value = std::stoll(vals[col]);
                 }
 
                 catch (...)
 
                 {
 
-                    value.i = 0; // Default value
-                    value.is_null = true;
+                    value.i->value = 0; // Default value
+                    value.i->is_null = true;
                 }
 
                 break;
@@ -288,15 +290,14 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 
                 {
 
-                    value.d = std::stod(vals[col]);
+                    value.d->value = std::stod(vals[col]);
                 }
 
                 catch (...)
 
                 {
-
-                    value.d = 0; // Default value
-                    value.is_null = true;
+                    value.d->value = 0.0; // Default value
+                    value.d->is_null = true;
                 }
 
                 break;
@@ -419,7 +420,9 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
 
 unionV CSVProcessor::convertToUnionV(const std::string &value, ColumnType type)
 {
-    unionV result;
+    unionV result = {};
+    result.i = new TheInteger();
+    result.d = new TheDouble();
 
     switch (type)
     {
@@ -430,24 +433,24 @@ unionV CSVProcessor::convertToUnionV(const std::string &value, ColumnType type)
     case ColumnType::INTEGER:
         try
         {
-            result.i = std::stoll(value);
+            result.i->value = std::stoll(value);
         }
         catch (const std::exception &)
         {
-            result.i = 0; // Default value for failed conversion
-            result.is_null = true;
+            result.i->value = 0; // Default value for failed conversion
+            result.i->is_null = true;
         }
         break;
 
     case ColumnType::DOUBLE:
         try
         {
-            result.d = std::stod(value);
+            result.d->value = std::stod(value);
         }
         catch (const std::exception &)
         {
-            result.d = 0; // Default value for failed conversion
-            result.is_null = true;
+            result.d->value = 0.0; // Default value for failed conversion
+            result.d->is_null = true;
         }
         break;
 
@@ -473,11 +476,25 @@ std::string CSVProcessor::convertUnionToString(const unionV &value, ColumnType t
         break;
 
     case ColumnType::INTEGER:
-        result = std::to_string(value.i);
+        if (value.i->is_null == true)
+        {
+            result = std::to_string(0);
+        }
+        else
+        {
+            result = std::to_string(value.i->value);
+        }
         break;
 
     case ColumnType::DOUBLE:
-        result = std::to_string(value.d);
+        if (value.d->is_null == true)
+        {
+            result = std::to_string(0.0);
+        }
+        else
+        {
+            result = std::to_string(value.d->value);
+        }
         break;
 
     case ColumnType::DATETIME:

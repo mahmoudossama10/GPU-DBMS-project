@@ -16,10 +16,10 @@ namespace UnionUtils
             return *(aggValue.s);
 
         case ColumnType::INTEGER:
-            return std::to_string(aggValue.i);
+            return std::to_string(aggValue.i->value);
 
         case ColumnType::DOUBLE:
-            return std::to_string(aggValue.d);
+            return std::to_string(aggValue.d->value);
 
         case ColumnType::DATETIME:
         {
@@ -41,21 +41,22 @@ namespace UnionUtils
 
     unionV copyUnionValue(const unionV &value, ColumnType type)
     {
-        unionV copy;
+        unionV copy = {};
+        copy.i = new TheInteger();
+        copy.d = new TheDouble();
 
         switch (type)
         {
         case ColumnType::STRING:
             copy.s = (value.s != nullptr) ? new std::string(*value.s) : nullptr;
-            copy.is_null = value.is_null;
             break;
         case ColumnType::INTEGER:
-            copy.i = value.i;
-            copy.is_null = value.is_null;
+            copy.i->value = value.i->value;
+            copy.i->is_null = value.i->is_null;
             break;
         case ColumnType::DOUBLE:
-            copy.d = value.d;
-            copy.is_null = value.is_null;
+            copy.d->value = value.d->value;
+            copy.d->is_null = value.d->is_null;
             break;
         case ColumnType::DATETIME:
             if (value.t != nullptr)
@@ -67,7 +68,6 @@ namespace UnionUtils
             {
                 copy.t = nullptr;
             }
-            copy.is_null = value.is_null;
             break;
         }
 

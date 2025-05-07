@@ -129,13 +129,13 @@ bool OrderByPlan::compareRows(const std::vector<unionV> &a,
             cmp = (val_a.i < val_b.i) ? -1 : (val_a.i > val_b.i ? 1 : 0);
             break;
         case ColumnType::DOUBLE:
-            cmp = (val_a.d < val_b.d) ? -1 : (val_a.d > val_b.d ? 1 : 0);
+            cmp = (val_a.d->value < val_b.d->value) ? -1 : (val_a.d->value > val_b.d->value ? 1 : 0);
             break;
         case ColumnType::STRING:
             cmp = val_a.s->compare(*val_b.s);
             break;
         case ColumnType::DATETIME:
-            cmp = (val_a.d < val_b.d) ? -1 : (val_a.d > val_b.d ? 1 : 0);
+            cmp = (val_a.d->value < val_b.d->value) ? -1 : (val_a.d->value > val_b.d->value ? 1 : 0);
             break;
         default:
             throw SemanticError("Unsupported column type in ORDER BY");

@@ -494,12 +494,12 @@ unionV Join::getExprValue(
     else if (expr->type == hsql::kExprLiteralInt)
     {
         outType = ColumnType::INTEGER;
-        result.i = expr->ival;
+        result.i->value = expr->ival;
     }
     else if (expr->type == hsql::kExprLiteralFloat)
     {
         outType = ColumnType::DOUBLE;
-        result.d = expr->fval;
+        result.d->value = expr->fval;
     }
     else if (expr->type == hsql::kExprLiteralString)
     {
@@ -570,8 +570,8 @@ bool Join::compareValues(
             (lhsType == ColumnType::DOUBLE && rhsType == ColumnType::INTEGER))
         {
             // Convert to double comparison
-            double lhsDouble = (lhsType == ColumnType::INTEGER) ? static_cast<double>(lhs.i) : lhs.d;
-            double rhsDouble = (rhsType == ColumnType::INTEGER) ? static_cast<double>(rhs.i) : rhs.d;
+            double lhsDouble = (lhsType == ColumnType::INTEGER) ? static_cast<double>(lhs.i->value) : lhs.d->value;
+            double rhsDouble = (rhsType == ColumnType::INTEGER) ? static_cast<double>(rhs.i->value) : rhs.d->value;
             return compareDoubles(lhsDouble, rhsDouble, op);
         }
         else
@@ -594,7 +594,7 @@ bool Join::compareValues(
             case ColumnType::DOUBLE:
             {
                 std::stringstream ss;
-                ss << lhs.d;
+                ss << lhs.d->value;
                 lhsStr = ss.str();
                 break;
             }
@@ -628,7 +628,7 @@ bool Join::compareValues(
             case ColumnType::DOUBLE:
             {
                 std::stringstream ss;
-                ss << rhs.d;
+                ss << rhs.d->value;
                 rhsStr = ss.str();
                 break;
             }
@@ -658,10 +658,10 @@ bool Join::compareValues(
         return compareStrings(*(lhs.s), *(rhs.s), op);
 
     case ColumnType::INTEGER:
-        return compareIntegers(lhs.i, rhs.i, op);
+        return compareIntegers(lhs.i->value, rhs.i->value, op);
 
     case ColumnType::DOUBLE:
-        return compareDoubles(lhs.d, rhs.d, op);
+        return compareDoubles(lhs.d->value, rhs.d->value, op);
 
     default:
         throw SemanticError("Unsupported data type in join comparison");

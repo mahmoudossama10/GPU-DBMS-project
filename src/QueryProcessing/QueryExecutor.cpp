@@ -540,7 +540,9 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 // Helper function to copy union values based on type (similar to the one in your Table class)
 unionV QueryExecutor::copyUnionValue(const unionV &value, ColumnType type)
 {
-    unionV copy;
+    unionV copy = {};
+    copy.i = new TheInteger();
+    copy.d = new TheDouble();
 
     switch (type)
     {
@@ -548,10 +550,12 @@ unionV QueryExecutor::copyUnionValue(const unionV &value, ColumnType type)
         copy.s = (value.s != nullptr) ? new std::string(*value.s) : nullptr;
         break;
     case ColumnType::INTEGER:
-        copy.i = value.i;
+        copy.i->value = value.i->value;
+        copy.i->is_null = value.i->is_null;
         break;
     case ColumnType::DOUBLE:
-        copy.d = value.d;
+        copy.d->value = value.d->value;
+        copy.d->is_null = value.d->is_null;
         break;
     case ColumnType::DATETIME:
         if (value.t != nullptr)
