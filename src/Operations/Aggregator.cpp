@@ -16,11 +16,11 @@ std::shared_ptr<Table> AggregatorPlan::execute()
     auto aggregates = parseAggregates(select_list_, *input_);
     return aggregateTable(*input_, aggregates);
 }
-
 std::vector<AggregatorPlan::AggregateOp> AggregatorPlan::parseAggregates(
     const std::vector<hsql::Expr *> &select_list, const Table &table)
 {
     std::vector<AggregateOp> aggregates;
+    const auto &headers = table.getHeaders();
 
     for (const auto *expr : select_list)
     {
@@ -32,6 +32,7 @@ std::vector<AggregatorPlan::AggregateOp> AggregatorPlan::parseAggregates(
             if (func_name == "count" || func_name == "sum" || func_name == "avg" ||
                 func_name == "min" || func_name == "max")
             {
+
                 AggregateOp op;
                 op.function_name = func_name;
                 op.is_distinct = expr->distinct;
@@ -39,17 +40,38 @@ std::vector<AggregatorPlan::AggregateOp> AggregatorPlan::parseAggregates(
                 if (expr->exprList && !expr->exprList->empty())
                 {
                     const auto *arg = expr->exprList->at(0);
+
                     if (arg->type == hsql::kExprColumnRef && arg->name)
                     {
-                        op.column_name = arg->name;
+                        // Build qualified column name with alias (e.g., "a.age")
+                        std::string qualified_name;
+                        if (arg->table)
+                        {
+                            qualified_name = std::string(arg->table) + "." + arg->name;
+                        }
+                        else
+                        {
+                            qualified_name = arg->name;
+                        }
+
+                        // First try with qualified name
+                        op.column_name = qualified_name;
+
+                        // Fallback to unqualified name if needed
+                        if (!table.hasColumn(qualified_name))
+                        {
+                            op.column_name = arg->name;
+                        }
+
+                        // Final validation
                         if (!table.hasColumn(op.column_name))
                         {
-                            throw SemanticError("Column not found for aggregate: " + op.column_name);
+                            throw SemanticError("Column not found for aggregate: " + qualified_name);
                         }
                     }
                     else if (arg->type == hsql::kExprStar && func_name == "count")
                     {
-                        op.column_name = table.getHeaders()[0];
+                        op.column_name = headers[0]; // Use first column for COUNT(*)
                     }
                     else
                     {
@@ -115,14 +137,17 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
         result_headers.push_back(op.alias);
         ColumnType col_type = table.getColumnType(op.column_name);
 
-        if (op.function_name == "count"){
+        if (op.function_name == "count")
+        {
             result_types[op.alias] = ColumnType::INTEGER;
         }
-        else if (op.function_name == "avg") {
+        else if (op.function_name == "avg")
+        {
 
             result_types[op.alias] = ColumnType::DOUBLE;
         }
-        else {
+        else
+        {
             result_types[op.alias] = col_type;
         }
 

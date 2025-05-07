@@ -80,7 +80,10 @@ std::vector<OrderByPlan::SortColumn> OrderByPlan::parseOrderBy(const Table &tabl
         {
             col_name = expr->name;
         }
-
+        if (!table.hasColumn(col_name))
+        {
+            col_name = expr->name;
+        }
         // Find the column index
         size_t col_idx = table.getColumnIndex(col_name);
 

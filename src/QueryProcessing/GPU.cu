@@ -2466,6 +2466,10 @@ std::shared_ptr<Table> GPUManager::executeOrderBy(
                 col_name = expr->name;
             }
     
+            if (!table.hasColumn(col_name))
+            {
+                col_name = expr->name;
+            }
             // Find the column index
             size_t col_idx = table.getColumnIndex(col_name);
     
@@ -2694,41 +2698,77 @@ __global__ void finalReductionKernel(const AggResult* block_results, size_t num_
 }
 
 std::vector<GPUManager::AggregateOp> GPUManager::parseAggregates(
-    const std::vector<hsql::Expr*>& select_list, const Table& table) {
+    const std::vector<hsql::Expr *> &select_list, const Table &table)
+{
     std::vector<AggregateOp> aggregates;
+    const auto &headers = table.getHeaders();
 
-    for (const auto* expr : select_list) {
-        if (expr->type == hsql::kExprFunctionRef && expr->name) {
+    for (const auto *expr : select_list)
+    {
+        if (expr->type == hsql::kExprFunctionRef && expr->name)
+        {
             std::string func_name = expr->name;
             std::transform(func_name.begin(), func_name.end(), func_name.begin(), ::tolower);
 
             if (func_name == "count" || func_name == "sum" || func_name == "avg" ||
-                func_name == "min" || func_name == "max") {
+                func_name == "min" || func_name == "max")
+            {
+
                 AggregateOp op;
                 op.function_name = func_name;
                 op.is_distinct = expr->distinct;
 
-                if (expr->exprList && !expr->exprList->empty()) {
-                    const auto* arg = expr->exprList->at(0);
-                    if (arg->type == hsql::kExprColumnRef && arg->name) {
-                        op.column_name = arg->name;
-                        if (!table.hasColumn(op.column_name)) {
-                            throw SemanticError("Column not found for aggregate: " + op.column_name);
+                if (expr->exprList && !expr->exprList->empty())
+                {
+                    const auto *arg = expr->exprList->at(0);
+
+                    if (arg->type == hsql::kExprColumnRef && arg->name)
+                    {
+                        // Build qualified column name with alias (e.g., "a.age")
+                        std::string qualified_name;
+                        if (arg->table)
+                        {
+                            qualified_name = std::string(arg->table) + "." + arg->name;
                         }
-                        op.column_index = table.getColumnIndex(op.column_name);
-                    } else if (arg->type == hsql::kExprStar && func_name == "count") {
-                        op.column_name = table.getHeaders()[0];
-                        op.column_index = 0;
-                    } else {
+                        else
+                        {
+                            qualified_name = arg->name;
+                        }
+
+                        // First try with qualified name
+                        op.column_name = qualified_name;
+
+                        // Fallback to unqualified name if needed
+                        if (!table.hasColumn(qualified_name))
+                        {
+                            op.column_name = arg->name;
+                        }
+
+                        // Final validation
+                        if (!table.hasColumn(op.column_name))
+                        {
+                            throw SemanticError("Column not found for aggregate: " + qualified_name);
+                        }
+                    }
+                    else if (arg->type == hsql::kExprStar && func_name == "count")
+                    {
+                        op.column_name = headers[0]; // Use first column for COUNT(*)
+                    }
+                    else
+                    {
                         throw SemanticError("Invalid argument for aggregate function: " + func_name);
                     }
-                } else {
+                }
+                else
+                {
                     throw SemanticError("No arguments provided for aggregate function: " + func_name);
                 }
 
                 op.alias = expr->alias ? expr->alias : func_name + "(" + op.column_name + ")";
                 aggregates.push_back(op);
-            } else {
+            }
+            else
+            {
                 throw SemanticError("Unsupported aggregate function: " + func_name);
             }
         }
@@ -2736,6 +2776,5 @@ std::vector<GPUManager::AggregateOp> GPUManager::parseAggregates(
 
     return aggregates;
 }
-
 
 
