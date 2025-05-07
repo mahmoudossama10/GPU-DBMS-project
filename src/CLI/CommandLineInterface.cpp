@@ -3,24 +3,49 @@
 #include <iostream>
 #include <sstream>
 #include <chrono>
+#include <algorithm>
+#include <cctype>
 
 using namespace std::chrono;
 
 CommandLineInterface::CommandLineInterface()
-    : storageManager(std::make_unique<StorageManager>()) {}
+    : storageManager(std::make_unique<StorageManager>()), historyIndex(0)
+{
+    linenoiseSetMultiLine(1);
+    linenoiseHistorySetMaxLen(100);
+}
+
+CommandLineInterface::~CommandLineInterface()
+{
+    linenoiseHistorySave("history.txt");
+}
+
+std::string CommandLineInterface::getInput()
+{
+    char *line = linenoise("> ");
+    if (line == nullptr)
+    {
+        return "quit";
+    }
+    std::string input = line;
+    linenoiseHistoryAdd(line);
+    free(line);
+    return input;
+}
 
 void CommandLineInterface::run()
 {
     std::cout << "SQL-like Query Processor\nType 'help' for commands\n";
 
-    std::string input;
     while (true)
     {
-        std::cout << "> ";
-        std::getline(std::cin, input);
+        std::string input = getInput();
 
         if (input.empty())
+        {
             continue;
+        }
+
         if (input == "exit" || input == "quit")
             break;
 
@@ -41,7 +66,9 @@ void CommandLineInterface::run()
                 std::string cmd, arg;
                 iss >> cmd;
                 while (iss >> arg)
+                {
                     args.push_back(arg);
+                }
                 handleLoadCommand(args);
             }
             else if (input.rfind("set mode ", 0) == 0)
@@ -64,7 +91,6 @@ void CommandLineInterface::run()
                     std::cout << "Invalid mode. Use 'CPU' or 'GPU'.\n";
                 }
             }
-
             else
             {
                 processQuery(input);
@@ -130,6 +156,7 @@ void CommandLineInterface::cleanupBatchTables()
         }
     }
 }
+
 void CommandLineInterface::processQuery(const std::string &query)
 {
     try
@@ -144,14 +171,16 @@ void CommandLineInterface::processQuery(const std::string &query)
             const auto &columns = result->getHeaders();
             const auto &columnData = result->getData(); // Now returns unordered_map<string, vector<string>>
             const int totalRows = result->getSize();
-            const auto columnTypes = result->getColumnTypes();
+            const auto &columnTypes = result->getColumnTypes();
 
             // Display column headers
             for (size_t i = 0; i < columns.size(); ++i)
             {
                 std::cout << columns[i];
                 if (i < columns.size() - 1)
+                {
                     std::cout << " | ";
+                }
             }
             std::cout << "\n";
 
@@ -172,7 +201,7 @@ void CommandLineInterface::processQuery(const std::string &query)
                 for (size_t colIdx = 0; colIdx < columns.size(); ++colIdx)
                 {
                     const auto &colName = columns[colIdx];
-                    switch (columnTypes.at(columns[colIdx]))
+                    switch (columnTypes.at(colName))
                     {
                     case ColumnType::INTEGER:
                         std::cout << columnData.at(colName)[rowIdx].i;
@@ -232,7 +261,7 @@ void CommandLineInterface::handleLoadCommand(const std::vector<std::string> &arg
 {
     if (args.size() != 2)
     {
-        std::cout << ("Usage: load <table_name> <filepath>");
+        std::cerr << "Usage: load <table_name> <filepath>\n";
         return;
     }
 
@@ -241,8 +270,15 @@ void CommandLineInterface::handleLoadCommand(const std::vector<std::string> &arg
 
     auto start = high_resolution_clock::now();
 
-    storageManager->loadTable(tableName, filepath);
-    std::cout << "Loaded table '" << tableName << "' from " << filepath << "\n";
+    try
+    {
+        storageManager->loadTable(tableName, filepath);
+        std::cout << "Loaded table '" << tableName << "' from " << filepath << "\n";
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error loading table: " << e.what() << "\n";
+    }
     auto end = high_resolution_clock::now();
 
     auto duration = duration_cast<milliseconds>(end - start);

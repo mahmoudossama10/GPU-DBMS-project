@@ -1,0 +1,2 @@
+load aoz ../../data/input/aoz.csv
+exit
