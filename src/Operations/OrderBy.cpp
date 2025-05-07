@@ -2,6 +2,7 @@
 #include "../../include/Utilities/StringUtils.hpp"
 #include "Utilities/ErrorHandling.hpp"
 #include <algorithm>
+#include <cmath>
 
 OrderByPlan::OrderByPlan(std::shared_ptr<Table> input,
                          const std::vector<hsql::OrderDescription *> &order_exprs)
@@ -30,11 +31,11 @@ std::shared_ptr<Table> OrderByPlan::execute()
         }
     }
 
-    std::sort(sorted_rows.begin(), sorted_rows.end(),
-              [&](const std::vector<unionV> &a, const std::vector<unionV> &b)
-              {
-                  return compareRows(a, b, sort_cols);
-              });
+    std::stable_sort(sorted_rows.begin(), sorted_rows.end(),
+                     [&](const std::vector<unionV> &a, const std::vector<unionV> &b)
+                     {
+                         return compareRows(a, b, sort_cols);
+                     });
 
     std::unordered_map<std::string, std::vector<unionV>> sorted_data_map;
     const auto &headers = table->getHeaders();
@@ -126,11 +127,17 @@ bool OrderByPlan::compareRows(const std::vector<unionV> &a,
         switch (sort_col.type)
         {
         case ColumnType::INTEGER:
-            cmp = (val_a.i < val_b.i) ? -1 : (val_a.i > val_b.i ? 1 : 0);
+            cmp = (val_a.i->value < val_b.i->value) ? -1 : (val_a.i->value > val_b.i->value ? 1 : 0);
             break;
         case ColumnType::DOUBLE:
-            cmp = (val_a.d->value < val_b.d->value) ? -1 : (val_a.d->value > val_b.d->value ? 1 : 0);
+        {
+            constexpr double epsilon = 1e-9;
+            if (std::fabs(val_a.d->value - val_b.d->value) < epsilon)
+                cmp = 0;
+            else
+                cmp = (val_a.d->value < val_b.d->value) ? -1 : 1;
             break;
+        }
         case ColumnType::STRING:
             cmp = val_a.s->compare(*val_b.s);
             break;

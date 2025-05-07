@@ -209,7 +209,7 @@ void CommandLineInterface::processQuery(const std::string &query)
                     switch (columnTypes.at(colName))
                     {
                     case ColumnType::INTEGER:
-                        std::cout << columnData.at(colName)[rowIdx].i;
+                        std::cout << columnData.at(colName)[rowIdx].i->value;
                         break;
 
                     case ColumnType::STRING:
@@ -217,7 +217,7 @@ void CommandLineInterface::processQuery(const std::string &query)
                         break;
 
                     case ColumnType::DOUBLE:
-                        std::cout << columnData.at(colName)[rowIdx].d;
+                        std::cout << columnData.at(colName)[rowIdx].d->value;
                         break;
 
                     default:
@@ -336,26 +336,31 @@ void CommandLineInterface::handleTestCommand()
         // {3, "SELECT * FROM people ORDER BY name ASC"},
         // {4, "SELECT * FROM people ORDER BY birthday DESC"},
         // FILTERING
-        {5, "SELECT * FROM people WHERE age > 30"},
+        // {5, "SELECT * FROM people WHERE age > 30"},
         // {6, "SELECT * FROM people WHERE salary >= 60000"},
         // {7, "SELECT * FROM people WHERE name != 'Osama'"},
         // {8, "SELECT * FROM people WHERE birthday < '2000-01-01'"},
         // {9, "SELECT * FROM people WHERE status = 'active'"},
+        // FILTERING WITH AND / OR
+        // {10, "SELECT * FROM people WHERE age > 30 AND salary >= 50000"},
+        // {11, "SELECT * FROM people WHERE status = 'active' OR birthday > '1990-01-01'"},
+        // {12, "SELECT * FROM people WHERE name = 'Ahmed' AND age <= 40 AND salary > 45000"},
+        // {13, "SELECT * FROM people WHERE name = 'Sara' OR (age > 35 AND salary < 70000)"},
         // NESTED QUERIES
-        // {10, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
-        // {11, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
+        // {14, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
+        // {15, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
         // JOIN
-        // {12, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id % 100 = d.id"},
-        // {13, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.salary >= d.id * 1000"},
+        // {16, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id = d.id"},
+        // {17, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.id = d.id AND p.salary >= 40000"},
         // MULTIPLE TABLES
-        // {14, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id % 100 = d.id AND m.id = d.id"},
+        // {18, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id = d.id AND m.id = 1"},
         // AGGREGATION
-        // {15, "SELECT COUNT(*) AS total_people FROM people"},
-        // {16, "SELECT AVG(salary) AS avg_salary FROM people"},
-        // {17, "SELECT MAX(age) AS max_age FROM people"},
-        // {18, "SELECT MIN(birthday) AS earliest_birthday FROM people"},
+        // {19, "SELECT COUNT(*) AS total_people FROM people"},
+        {20, "SELECT AVG(salary) AS avg_salary FROM people"},
+        // {21, "SELECT MAX(age) AS max_age FROM people"},
+        // {22, "SELECT MIN(birthday) AS earliest_birthday FROM people"},
         // PROJECTION
-        // {19, "SELECT name, salary FROM people"}
+        // {23, "SELECT name, salary FROM people"}
     };
 
     // Step 3: Execute each query and verify against test cases
@@ -368,7 +373,7 @@ void CommandLineInterface::handleTestCommand()
 
     for (size_t i = 0; i < testQueries.size(); ++i)
     {
-        std::cout << "\nTest Case #" << (i + 1) << ": " << testQueries[i].second << std::endl;
+        std::cout << "\nTest Case #" << testQueries[i].first << ": " << testQueries[i].second << std::endl;
 
         try
         {

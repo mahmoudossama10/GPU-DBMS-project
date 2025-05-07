@@ -100,7 +100,6 @@ std::shared_ptr<Table> Filter::apply(
     std::unordered_map<std::string, std::vector<unionV>> filteredColumnData;
     for (const auto &header : headers)
     {
-        filteredColumnData[header] = std::vector<unionV>();
         filteredColumnData[header].reserve(rowCount);
     }
 
@@ -287,7 +286,7 @@ std::string Filter::unionToString(const unionV &value, ColumnType type)
     case ColumnType::STRING:
         return *(value.s);
     case ColumnType::INTEGER:
-        ss << value.i;
+        ss << value.i->value;
         return ss.str();
     case ColumnType::DOUBLE:
         ss << value.d->value;

@@ -587,7 +587,7 @@ bool Join::compareValues(
             case ColumnType::INTEGER:
             {
                 std::stringstream ss;
-                ss << lhs.i;
+                ss << lhs.i->value;
                 lhsStr = ss.str();
                 break;
             }
@@ -621,7 +621,7 @@ bool Join::compareValues(
             case ColumnType::INTEGER:
             {
                 std::stringstream ss;
-                ss << rhs.i;
+                ss << rhs.i->value;
                 rhsStr = ss.str();
                 break;
             }

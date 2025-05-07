@@ -40,6 +40,14 @@ union unionV
     TheInteger *i;
     TheDouble *d;
     dateTime *t;
+
+    unionV()
+    {
+        s = new std::string("str");
+        i = new TheInteger{0, false};
+        d = new TheDouble{0.0, false};
+        t = new dateTime{0, 0, 0, 0, 0, 0};
+    }
 };
 
 namespace UnionUtils
