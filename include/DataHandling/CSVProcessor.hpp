@@ -31,6 +31,7 @@ public:
 
     // Methods for row-major format
     static CSVData loadCSV(const std::string &filepath);
+    static std::vector<ColumnType> inferTypes(const std::string& row);
 
     static void saveCSV(const std::string &filepath,
                         const std::vector<std::string> &headers,
