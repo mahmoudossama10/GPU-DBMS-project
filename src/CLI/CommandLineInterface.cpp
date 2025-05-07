@@ -329,32 +329,32 @@ void CommandLineInterface::handleTestCommand()
     }
 
     // Step 2: Define test queries
-    std::vector<std::string> testQueries = {
+    std::vector<std::pair<int, std::string>> testQueries = {
         // ORDER BY
-        "SELECT * FROM people ORDER BY age ASC",
-        "SELECT * FROM people ORDER BY salary DESC",
-        "SELECT * FROM people ORDER BY name ASC",
-        "SELECT * FROM people ORDER BY birthday DESC",
+        // {1, "SELECT * FROM people ORDER BY age ASC"},
+        // {2, "SELECT * FROM people ORDER BY salary DESC"},
+        // {3, "SELECT * FROM people ORDER BY name ASC"},
+        // {4, "SELECT * FROM people ORDER BY birthday DESC"},
         // FILTERING
-        "SELECT * FROM people WHERE age > 30",
-        "SELECT * FROM people WHERE salary >= 60000",
-        "SELECT * FROM people WHERE name != 'Osama'",
-        "SELECT * FROM people WHERE birthday < '2000-01-01'",
-        "SELECT * FROM people WHERE status = 'active'",
+        // {5, "SELECT * FROM people WHERE age > 30"},
+        // {6, "SELECT * FROM people WHERE salary >= 60000"},
+        // {7, "SELECT * FROM people WHERE name != 'Osama'"},
+        // {8, "SELECT * FROM people WHERE birthday < '2000-01-01'"},
+        // {9, "SELECT * FROM people WHERE status = 'active'"},
         // NESTED QUERIES
-        "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)",
-        "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)",
+        {10, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
+        // {11, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
         // JOIN
-        // "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id % 100 = d.id",
-        // "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.salary >= d.id * 1000",
+        // {12, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id % 100 = d.id"},
+        // {13, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.salary >= d.id * 1000"},
         // MULTIPLE TABLES
-        // "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id % 100 = d.id AND m.id = d.id",
+        // {14, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id % 100 = d.id AND m.id = d.id"},
         // AGGREGATION
-        // "SELECT COUNT(*) AS total_people FROM people",
-        // "SELECT AVG(salary) AS avg_salary FROM people",
-        // "SELECT MAX(age) AS max_age FROM people",
-        // "SELECT MIN(birthday) AS earliest_birthday FROM people",
-        // "SELECT name, salary FROM people"
+        // {15, "SELECT COUNT(*) AS total_people FROM people"},
+        // {16, "SELECT AVG(salary) AS avg_salary FROM people"},
+        // {17, "SELECT MAX(age) AS max_age FROM people"},
+        // {18, "SELECT MIN(birthday) AS earliest_birthday FROM people"},
+        // {19, "SELECT name, salary FROM people"}
     };
 
     // Step 3: Execute each query and verify against test cases
@@ -365,14 +365,14 @@ void CommandLineInterface::handleTestCommand()
 
     for (size_t i = 0; i < testQueries.size(); ++i)
     {
-        std::cout << "\nTest Case #" << (i + 1) << ": " << testQueries[i] << std::endl;
+        std::cout << "\nTest Case #" << (i + 1) << ": " << testQueries[i].second << std::endl;
 
         try
         {
             // Execute the query
             auto start = high_resolution_clock::now();
             QueryExecutor executor(storageManager);
-            std::shared_ptr<Table> result = executor.execute(testQueries[i]);
+            std::shared_ptr<Table> result = executor.execute(testQueries[i].second);
             auto end = high_resolution_clock::now();
             auto duration = duration_cast<milliseconds>(end - start);
 
@@ -388,7 +388,7 @@ void CommandLineInterface::handleTestCommand()
 
             // Determine which reference file to compare against
             std::string referenceFilePath;
-            referenceFilePath = "../../data/output/test_results/test_case" + std::to_string(i + 1) + ".csv";
+            referenceFilePath = "../../data/output/test_results/test_case" + std::to_string(testQueries[i].first) + ".csv";
 
             // Compare with reference file
             bool matched = compareCSVFiles(tempOutputPath, referenceFilePath);

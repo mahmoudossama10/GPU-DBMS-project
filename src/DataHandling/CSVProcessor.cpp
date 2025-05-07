@@ -57,324 +57,254 @@ std::vector<ColumnType> CSVProcessor::inferTypes(const std::string& row) {
 
 }
 
+
 CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 {
     // Step 1: Read all lines into memory
-
     std::vector<std::string> lines;
-
     std::ifstream file(filepath);
-
     if (!file.is_open())
-
     {
-
         throw std::runtime_error("Unable to open file: " + filepath);
-
     }
-
 
     std::string line;
-
     while (std::getline(file, line))
-
     {
-
         if (!line.empty() && line.back() == '\r')
-
         {
-
             line.pop_back();
-
         }
-
         if (!line.empty())
-
         {
-
             lines.push_back(line);
-
         }
-
     }
-
     file.close();
 
-
     if (lines.empty())
-
     {
-
         return {std::vector<std::string>(), std::unordered_map<std::string, std::vector<unionV>>(), std::unordered_map<std::string, ColumnType>()};
-
     }
 
+    // Step 2: Parse headers from the first line and clean them (remove annotations)
+    std::vector<std::string> rawHeaders = parseCSVLine(lines[0]);
+    std::vector<std::string> headers;
 
-    // Step 2: Parse headers from the first line
-
-    std::vector<std::string> headers = parseCSVLine(lines[0]);
-
-
-    // Step 3: Infer types from the second row (or a small sample for robustness)
-
-    std::vector<ColumnType> types(headers.size(), ColumnType::STRING);
-
-    if (lines.size() > 1)
-
+    for (size_t i = 0; i < rawHeaders.size(); ++i)
     {
-
-        // Use a small sample (up to 5 rows) for type inference, balancing speed and accuracy
-
-        const size_t SAMPLE_SIZE = 5;
-
-        std::vector<std::vector<std::string>> sampleRows;
-
-        for (size_t i = 1; i < lines.size() && sampleRows.size() < SAMPLE_SIZE; ++i)
-
+        std::string cleanedHeader = rawHeaders[i];
+        // Remove annotations like (N), (P), (T), (D) from the header name
+        size_t pos = cleanedHeader.find('(');
+        if (pos != std::string::npos)
         {
+            cleanedHeader = cleanedHeader.substr(0, pos);
+        }
+        // Trim any trailing whitespace
+        while (!cleanedHeader.empty() && std::isspace(cleanedHeader.back()))
+        {
+            cleanedHeader.pop_back();
+        }
+        headers.push_back(cleanedHeader);
+    }
 
+    // Step 3: Overwrite the CSV file with cleaned headers to ensure subsequent loads see updated names
+    // Write to a temporary file first to avoid data loss
+    std::string tempFilepath = filepath + ".tmp";
+    std::ofstream tempFile(tempFilepath);
+    if (!tempFile.is_open())
+    {
+        throw std::runtime_error("Unable to create temporary file for writing: " + tempFilepath);
+    }
+
+    // Write the cleaned headers as the first line
+    for (size_t i = 0; i < headers.size(); ++i)
+    {
+        tempFile << headers[i];
+        if (i < headers.size() - 1)
+            tempFile << ",";
+    }
+    tempFile << "\n";
+
+    // Write the rest of the lines (data rows) unchanged
+    for (size_t i = 1; i < lines.size(); ++i)
+    {
+        tempFile << lines[i];
+        if (i < lines.size() - 1)
+            tempFile << "\n";
+    }
+    tempFile.close();
+
+    // Replace the original file with the temporary file
+    if (std::remove(filepath.c_str()) != 0)
+    {
+        throw std::runtime_error("Failed to remove original file: " + filepath);
+    }
+    if (std::rename(tempFilepath.c_str(), filepath.c_str()) != 0)
+    {
+        throw std::runtime_error("Failed to rename temporary file to: " + filepath);
+    }
+
+    // Step 4: Infer types using sampling (as in original code)
+    std::vector<ColumnType> types(headers.size(), ColumnType::STRING); // Default to STRING
+    if (lines.size() > 1)
+    {
+        // Use a sample of rows to determine types (as in original code)
+        const size_t SAMPLE_SIZE = 10; // Sample first 10 rows to determine types
+        std::vector<std::vector<std::string>> sampleRows;
+        size_t sampleCount = 0;
+
+        for (size_t i = 1; i < lines.size() && sampleCount < SAMPLE_SIZE; ++i)
+        {
             auto row = parseCSVLine(lines[i]);
-
             if (row.size() == headers.size())
-
             {
-
                 sampleRows.push_back(row);
-
+                sampleCount++;
             }
-
         }
 
-
+        // Analyze sample data to determine column types
         for (size_t col = 0; col < headers.size(); ++col)
-
         {
-
             bool canBeInt = true;
-
             bool canBeDouble = true;
-
+            bool canBeBool = true;
 
             for (const auto& row : sampleRows)
-
             {
-
                 const std::string& value = row[col];
-
                 if (value.empty())
-
                     continue;
 
+                // Check if can be boolean (as in original code, if needed)
+                if (canBeBool)
+                {
+                    std::string valueLower = value;
+                    std::transform(valueLower.begin(), valueLower.end(), valueLower.begin(),
+                                   [](unsigned char c) { return std::tolower(c); });
+                    if (valueLower != "true" && valueLower != "false" &&
+                        valueLower != "1" && valueLower != "0" &&
+                        valueLower != "yes" && valueLower != "no" &&
+                        valueLower != "y" && valueLower != "n")
+                    {
+                        canBeBool = false;
+                    }
+                }
 
+                // Check if can be integer
                 if (canBeInt)
-
                 {
-
                     try
-
                     {
-
                         size_t pos = 0;
-
                         std::stoi(value, &pos);
-
                         if (pos != value.length())
-
                             canBeInt = false;
-
                     }
-
                     catch (...)
-
                     {
-
                         canBeInt = false;
-
                     }
-
                 }
 
-
+                // Check if can be double if not integer
                 if (canBeDouble && !canBeInt)
-
                 {
-
                     try
-
                     {
-
                         size_t pos = 0;
-
                         std::stod(value, &pos);
-
                         if (pos != value.length())
-
                             canBeDouble = false;
-
                     }
-
                     catch (...)
-
                     {
-
                         canBeDouble = false;
-
                     }
-
                 }
-
             }
 
-
+            // Determine the most specific type that fits all values
             if (canBeInt)
-
                 types[col] = ColumnType::INTEGER;
-
             else if (canBeDouble)
-
                 types[col] = ColumnType::DOUBLE;
-
             else
-
                 types[col] = ColumnType::STRING;
-
         }
-
     }
 
-
-    // Step 4: Pre-allocate storage for data (array-like for parallelism)
-
+    // Step 5: Pre-allocate storage for data (array-like for parallelism)
     size_t rowCount = lines.size() > 1 ? lines.size() - 1 : 0;
-
     std::vector<std::vector<unionV>> tempData(headers.size());
-
     for (size_t col = 0; col < headers.size(); ++col)
-
     {
-
         tempData[col].resize(rowCount); // Pre-allocate space for each column
-
     }
 
-
-    // Step 5: Parallel processing of rows into pre-allocated vectors
-
+    // Step 6: Parallel processing of rows into pre-allocated vectors
 #pragma omp parallel for schedule(static)
-
     for (size_t i = 1; i < lines.size(); ++i)
-
     {
-
         auto vals = parseCSVLine(lines[i]);
-
         if (vals.size() != headers.size())
-
         {
-
 #pragma omp critical
-
             {
-
                 throw std::runtime_error("Wrong number of columns in file: " + filepath + ", line " + std::to_string(i + 1));
-
             }
-
         }
-
 
         for (size_t col = 0; col < headers.size(); ++col)
-
         {
-
             unionV value;
-
             switch (types[col])
-
             {
-
             case ColumnType::INTEGER:
-
                 try
-
                 {
-
                     value.i = std::stoll(vals[col]);
-
                 }
-
                 catch (...)
-
                 {
-
                     value.i = 0; // Default value
-
                 }
-
                 break;
-
 
             case ColumnType::DOUBLE:
-
                 try
-
                 {
-
                     value.d = std::stod(vals[col]);
-
                 }
-
                 catch (...)
-
                 {
-
                     value.d = 0.0; // Default value
-
                 }
-
                 break;
-
 
             case ColumnType::STRING:
-
                 value.s = new std::string(vals[col]);
-
                 break;
-
 
             case ColumnType::DATETIME:
-
                 value.t = parseDateTime(vals[col]);
-
                 break;
-
             }
-
             tempData[col][i - 1] = value; // Direct indexing, thread-safe due to pre-allocation
-
         }
-
     }
 
-
-    // Step 6: Convert temporary array structure to CSVData format
-
+    // Step 7: Convert temporary array structure to CSVData format
     std::unordered_map<std::string, std::vector<unionV>> columnData;
-
     std::unordered_map<std::string, ColumnType> columnTypeMap;
-
     for (size_t col = 0; col < headers.size(); ++col)
-
     {
-
-        columnData[headers[col]] = std::move(tempData[col]); // Move pre-allocated vector
-
-        columnTypeMap[headers[col]] = types[col];
-
+        columnData[headers[col]] = std::move(tempData[col]); // Use cleaned header
+        columnTypeMap[headers[col]] = types[col];           // Use cleaned header
     }
 
-
-    return {headers, columnData, columnTypeMap};
+    return {headers, columnData, columnTypeMap}; // Return cleaned headers for immediate query use
 }
 
 std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
@@ -576,36 +506,101 @@ dateTime *CSVProcessor::parseDateTime(const std::string &datetime)
 {
     dateTime *dt = new dateTime();
 
+
     // Initialize with defaults
+
     dt->year = 1970;
+
     dt->month = 1;
+
     dt->day = 1;
+
     dt->hour = 0;
+
     dt->minute = 0;
+
     dt->second = 0;
 
-    // Use regex to parse various datetime formats
-    // Expected format: YYYY-MM-DD HH:MM:SS or YYYY/MM/DD HH:MM:SS
+
+    // Simplified regex pattern without non-capturing groups for broader compatibility
+
     std::regex datetime_pattern(
-        R"((\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?)",
+
+        "(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})( \\d{1,2}:\\d{1,2}:\\d{1,2})?",
+
         std::regex::extended);
 
+
     std::smatch matches;
-    if (std::regex_match(datetime, matches, datetime_pattern))
-    {
-        if (matches.size() > 1)
-            dt->year = static_cast<unsigned short>(std::stoi(matches[1].str()));
-        if (matches.size() > 2)
-            dt->month = static_cast<unsigned short>(std::stoi(matches[2].str()));
-        if (matches.size() > 3)
-            dt->day = static_cast<unsigned short>(std::stoi(matches[3].str()));
-        if (matches.size() > 4 && matches[4].matched)
-            dt->hour = static_cast<unsigned char>(std::stoi(matches[4].str()));
-        if (matches.size() > 5 && matches[5].matched)
-            dt->minute = static_cast<unsigned char>(std::stoi(matches[5].str()));
-        if (matches.size() > 6 && matches[6].matched)
-            dt->second = static_cast<unsigned char>(std::stoi(matches[6].str()));
+
+    try {
+
+        if (std::regex_match(datetime, matches, datetime_pattern))
+
+        {
+
+            if (matches.size() > 1 && !matches[1].str().empty())
+
+                dt->year = static_cast<unsigned short>(std::stoi(matches[1].str()));
+
+            if (matches.size() > 2 && !matches[2].str().empty())
+
+                dt->month = static_cast<unsigned short>(std::stoi(matches[2].str()));
+
+            if (matches.size() > 3 && !matches[3].str().empty())
+
+                dt->day = static_cast<unsigned short>(std::stoi(matches[3].str()));
+
+            if (matches.size() > 4 && matches[4].matched && !matches[4].str().empty())
+
+            {
+
+                // Extract time components from the matched group " HH:MM:SS"
+
+                std::string timePart = matches[4].str();
+
+                std::stringstream ss(timePart);
+
+                std::string token;
+
+                std::vector<int> timeVals;
+
+                while (std::getline(ss, token, ':'))
+
+                {
+
+                    if (!token.empty())
+
+                        timeVals.push_back(std::stoi(token));
+
+                }
+
+                if (timeVals.size() >= 1)
+
+                    dt->hour = static_cast<unsigned char>(timeVals[0]);
+
+                if (timeVals.size() >= 2)
+
+                    dt->minute = static_cast<unsigned char>(timeVals[1]);
+
+                if (timeVals.size() >= 3)
+
+                    dt->second = static_cast<unsigned char>(timeVals[2]);
+
+            }
+
+        }
+
     }
+
+    catch (const std::exception& e) {
+
+        std::cerr << "Regex error in parseDateTime for input '" << datetime << "': " << e.what() << std::endl;
+
+        // Fallback to default values or alternative parsing if needed
+
+    }
+
 
     return dt;
 }
