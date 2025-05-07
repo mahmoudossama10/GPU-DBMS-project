@@ -11,7 +11,8 @@ public:
     bool tableExists(const std::string &tableName) const;
     std::vector<std::string> getTableNames() const;
     void renameTable(const std::string &oldName, const std::string &newName);
-    void addTable(const std::shared_ptr<Table>& table);
+    void addTable(const std::shared_ptr<Table> &table);
+    std::vector<std::string> listTables() const;
 
     std::unordered_map<std::string, std::unique_ptr<Table>> tables;
 };

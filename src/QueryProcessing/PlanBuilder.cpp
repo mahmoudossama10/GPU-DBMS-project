@@ -625,7 +625,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
                     table_name = std::string(tbl->name);
                     std::string file_name = "";
 
-                    size_t pos = table_name.find("batch");
+                    size_t pos = table_name.find("_batch");
                     if (pos != std::string::npos)
                     {
                         file_name = table_name.substr(0, pos);
@@ -635,7 +635,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
                         file_name = table_name; // fallback to full name if "batch" not found
                     }
 
-                    std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('../../data/input/" + file_name + "new.csv');";
+                    std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('../../data/input/" + file_name + ".csv');";
                     con.Query(create_query);
                     loaded_tables.push_back(table_name);
                 }
@@ -651,7 +651,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
             // else
             table_name = std::string(stmt->fromTable->name);
             std::string file_name = "";
-            size_t pos = table_name.find("batch");
+            size_t pos = table_name.find("_batch");
             if (pos != std::string::npos)
             {
                 file_name = table_name.substr(0, pos);
@@ -661,7 +661,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
                 file_name = table_name; // fallback to full name if "batch" not found
             }
 
-            std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('../../data/input/" + file_name + "new.csv');";
+            std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('../../data/input/" + file_name + ".csv');";
             con.Query(create_query);
             loaded_tables.push_back(table_name);
         }
@@ -770,7 +770,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     for (int i = 0; i < table_names.size(); i++)
     {
         std::string rename_query = "ALTER TABLE " + table_names[i] + " RENAME COLUMN \"" + column_names[i] + "\" TO " + replaced_patterns[i] + ";";
-        // std::cout << rename_query << '\n';
+        std::cout << rename_query << '\n';
         con.Query(rename_query);
     }
     // std::cout << "Table Name -> Alias Mappings:\n";

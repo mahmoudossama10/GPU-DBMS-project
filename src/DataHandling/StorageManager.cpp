@@ -91,3 +91,13 @@ std::vector<std::string> StorageManager::getTableNames() const
 
     return names;
 }
+
+std::vector<std::string> StorageManager::listTables() const
+{
+    std::vector<std::string> tableNames;
+    for (const auto &pair : tables)
+    {
+        tableNames.push_back(pair.first);
+    }
+    return tableNames;
+}

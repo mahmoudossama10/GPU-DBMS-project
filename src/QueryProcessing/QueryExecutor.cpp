@@ -213,7 +213,15 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
     {
         hsql::SQLParserResult result;
         hsql::SQLParser::parse(query, &result);
+        if (!result.isValid() || result.size() == 0)
+        {
+            throw std::runtime_error("Failed to parse SQL query or no valid statement found.");
+        }
         const auto *stmt = result.getStatement(0);
+        if (!stmt || stmt->type() != hsql::kStmtSelect)
+        {
+            throw std::runtime_error("Parsed statement is not a valid SELECT statement.");
+        }
         return execute(static_cast<const hsql::SelectStatement *>(stmt), query);
     }
     else

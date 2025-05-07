@@ -183,8 +183,8 @@ void CommandLineInterface::processQuery(const std::string &query)
                         break;
 
                     case ColumnType::DOUBLE:
-                    std::cout << columnData.at(colName)[rowIdx].d;
-                    break;
+                        std::cout << columnData.at(colName)[rowIdx].d;
+                        break;
 
                     default:
                         throw std::runtime_error("Unsupported column type");
@@ -253,7 +253,19 @@ void CommandLineInterface::handleLoadCommand(const std::vector<std::string> &arg
 void CommandLineInterface::handleShowTablesCommand()
 {
     // TODO: Implement table listing
-    std::cout << "Tables loaded: \n";
+    auto tables = storageManager->listTables();
+    std::cout << "Tables loaded:\n";
+    if (tables.empty())
+    {
+        std::cout << "  (none)\n";
+    }
+    else
+    {
+        for (const auto &table : tables)
+        {
+            std::cout << "  " << table << "\n";
+        }
+    }
 }
 
 void CommandLineInterface::displayHelp()
