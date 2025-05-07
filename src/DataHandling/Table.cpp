@@ -351,7 +351,7 @@ int64_t Table::getInteger(const std::string &columnName, int rowIndex) const
         throw std::runtime_error("Column '" + columnName + "' is not an integer column");
     }
     auto cell = columnData.at(columnName)[rowIndex];
-    if (cell.is_null)
+    if (cell.is_null == true)
         throw std::runtime_error("NULL");
     return cell.i;
 }
@@ -371,7 +371,7 @@ double Table::getDouble(const std::string &columnName, int rowIndex) const
     }
 
     auto cell = columnData.at(columnName)[rowIndex];
-    if (cell.is_null)
+    if (cell.is_null == true)
         throw std::runtime_error("NULL");
     return cell.d;
 }

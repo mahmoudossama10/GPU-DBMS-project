@@ -343,19 +343,18 @@ void CommandLineInterface::handleTestCommand()
         // {9, "SELECT * FROM people WHERE status = 'active'"},
         // NESTED QUERIES
         {10, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
-        // {11, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
+        {11, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
         // JOIN
         // {12, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id % 100 = d.id"},
         // {13, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.salary >= d.id * 1000"},
         // MULTIPLE TABLES
         // {14, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id % 100 = d.id AND m.id = d.id"},
         // AGGREGATION
-        // {15, "SELECT COUNT(*) AS total_people FROM people"},
-        // {16, "SELECT AVG(salary) AS avg_salary FROM people"},
-        // {17, "SELECT MAX(age) AS max_age FROM people"},
-        // {18, "SELECT MIN(birthday) AS earliest_birthday FROM people"},
-        // {19, "SELECT name, salary FROM people"}
-    };
+        {15, "SELECT COUNT(*) AS total_people FROM people"},
+        {16, "SELECT AVG(salary) AS avg_salary FROM people"},
+        {17, "SELECT MAX(age) AS max_age FROM people"},
+        {18, "SELECT MIN(birthday) AS earliest_birthday FROM people"},
+        {19, "SELECT name, salary FROM people"}};
 
     // Step 3: Execute each query and verify against test cases
     int totalTests = testQueries.size();

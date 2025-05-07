@@ -208,8 +208,7 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
                 {
                     try
                     {
-                        int64_t val = i;
-                        total += table.getInteger(op.column_name, val);
+                        total += table.getInteger(op.column_name, i);
                     }
                     catch (std::runtime_error)
                     {
@@ -220,8 +219,7 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
                 {
                     try
                     {
-                        int64_t val = i;
-                        total += table.getDouble(op.column_name, val);
+                        total += table.getDouble(op.column_name, i);
                     }
                     catch (std::runtime_error)
                     {
