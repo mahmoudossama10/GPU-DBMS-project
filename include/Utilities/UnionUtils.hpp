@@ -28,6 +28,7 @@ union unionV
     int64_t i;
     double d;
     dateTime *t;
+    bool is_null = false;
 };
 
 namespace UnionUtils

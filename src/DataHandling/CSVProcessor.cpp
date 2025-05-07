@@ -8,7 +8,6 @@
 #include <sys/stat.h>
 #include <omp.h>
 
-
 // Default constructor
 CSVProcessor::CSVProcessor()
 {
@@ -17,44 +16,46 @@ CSVProcessor::CSVProcessor()
 
 // Ensure you have a matching inferTypes function adapted from your friend's approach
 
-std::vector<ColumnType> CSVProcessor::inferTypes(const std::string& row) {
+std::vector<ColumnType> CSVProcessor::inferTypes(const std::string &row)
+{
 
     std::vector<ColumnType> types;
 
     auto fields = parseCSVLine(row);
 
+    for (const auto &field : fields)
+    {
 
-    for (const auto& field: fields) {
-
-        try {
+        try
+        {
 
             auto int_val = std::stoll(field);
 
             types.push_back(ColumnType::INTEGER);
 
             continue;
+        }
+        catch (...)
+        {
+        }
 
-        } catch (...) {}
-
-
-        try {
+        try
+        {
 
             auto double_val = std::stod(field);
 
             types.push_back(ColumnType::DOUBLE);
 
             continue;
-
-        } catch (...) {}
-
+        }
+        catch (...)
+        {
+        }
 
         types.push_back(ColumnType::STRING);
-
     }
 
-
     return types;
-
 }
 
 CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
@@ -70,9 +71,7 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
     {
 
         throw std::runtime_error("Unable to open file: " + filepath);
-
     }
-
 
     std::string line;
 
@@ -85,7 +84,6 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         {
 
             line.pop_back();
-
         }
 
         if (!line.empty())
@@ -93,27 +91,21 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         {
 
             lines.push_back(line);
-
         }
-
     }
 
     file.close();
-
 
     if (lines.empty())
 
     {
 
         return {std::vector<std::string>(), std::unordered_map<std::string, std::vector<unionV>>(), std::unordered_map<std::string, ColumnType>()};
-
     }
-
 
     // Step 2: Parse headers from the first line
 
     std::vector<std::string> headers = parseCSVLine(lines[0]);
-
 
     // Step 3: Infer types from the second row (or a small sample for robustness)
 
@@ -140,11 +132,8 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
             {
 
                 sampleRows.push_back(row);
-
             }
-
         }
-
 
         for (size_t col = 0; col < headers.size(); ++col)
 
@@ -154,17 +143,15 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 
             bool canBeDouble = true;
 
-
-            for (const auto& row : sampleRows)
+            for (const auto &row : sampleRows)
 
             {
 
-                const std::string& value = row[col];
+                const std::string &value = row[col];
 
                 if (value.empty())
 
                     continue;
-
 
                 if (canBeInt)
 
@@ -181,7 +168,6 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                         if (pos != value.length())
 
                             canBeInt = false;
-
                     }
 
                     catch (...)
@@ -189,11 +175,8 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                     {
 
                         canBeInt = false;
-
                     }
-
                 }
-
 
                 if (canBeDouble && !canBeInt)
 
@@ -210,7 +193,6 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                         if (pos != value.length())
 
                             canBeDouble = false;
-
                     }
 
                     catch (...)
@@ -218,13 +200,9 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                     {
 
                         canBeDouble = false;
-
                     }
-
                 }
-
             }
-
 
             if (canBeInt)
 
@@ -237,11 +215,8 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
             else
 
                 types[col] = ColumnType::STRING;
-
         }
-
     }
-
 
     // Step 4: Pre-allocate storage for data (array-like for parallelism)
 
@@ -254,9 +229,7 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
     {
 
         tempData[col].resize(rowCount); // Pre-allocate space for each column
-
     }
-
 
     // Step 5: Parallel processing of rows into pre-allocated vectors
 
@@ -277,11 +250,8 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
             {
 
                 throw std::runtime_error("Wrong number of columns in file: " + filepath + ", line " + std::to_string(i + 1));
-
             }
-
         }
-
 
         for (size_t col = 0; col < headers.size(); ++col)
 
@@ -300,7 +270,6 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                 {
 
                     value.i = std::stoll(vals[col]);
-
                 }
 
                 catch (...)
@@ -308,11 +277,10 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                 {
 
                     value.i = 0; // Default value
-
+                    value.is_null = true;
                 }
 
                 break;
-
 
             case ColumnType::DOUBLE:
 
@@ -321,19 +289,17 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                 {
 
                     value.d = std::stod(vals[col]);
-
                 }
 
                 catch (...)
 
                 {
 
-                    value.d = 0.0; // Default value
-
+                    value.d = 0; // Default value
+                    value.is_null = true;
                 }
 
                 break;
-
 
             case ColumnType::STRING:
 
@@ -341,21 +307,16 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 
                 break;
 
-
             case ColumnType::DATETIME:
 
                 value.t = parseDateTime(vals[col]);
 
                 break;
-
             }
 
             tempData[col][i - 1] = value; // Direct indexing, thread-safe due to pre-allocation
-
         }
-
     }
-
 
     // Step 6: Convert temporary array structure to CSVData format
 
@@ -370,9 +331,7 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         columnData[headers[col]] = std::move(tempData[col]); // Move pre-allocated vector
 
         columnTypeMap[headers[col]] = types[col];
-
     }
-
 
     return {headers, columnData, columnTypeMap};
 }
@@ -385,13 +344,11 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
 
     bool inQuotes = false;
 
-
     for (size_t i = 0; i < line.length(); ++i)
 
     {
 
         char c = line[i];
-
 
         if (inQuotes)
 
@@ -408,7 +365,6 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
                     field += '"'; // Escaped quote
 
                     ++i;
-
                 }
 
                 else
@@ -416,9 +372,7 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
                 {
 
                     inQuotes = false; // End of quoted field
-
                 }
-
             }
 
             else
@@ -426,9 +380,7 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
             {
 
                 field += c;
-
             }
-
         }
 
         else
@@ -440,7 +392,6 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
             {
 
                 inQuotes = true;
-
             }
 
             else if (c == ',')
@@ -450,7 +401,6 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
                 result.push_back(field);
 
                 field.clear();
-
             }
 
             else
@@ -458,11 +408,8 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
             {
 
                 field += c;
-
             }
-
         }
-
     }
 
     result.push_back(field); // Add the last field
@@ -488,6 +435,7 @@ unionV CSVProcessor::convertToUnionV(const std::string &value, ColumnType type)
         catch (const std::exception &)
         {
             result.i = 0; // Default value for failed conversion
+            result.is_null = true;
         }
         break;
 
@@ -498,7 +446,8 @@ unionV CSVProcessor::convertToUnionV(const std::string &value, ColumnType type)
         }
         catch (const std::exception &)
         {
-            result.d = 0.0; // Default value for failed conversion
+            result.d = 0; // Default value for failed conversion
+            result.is_null = true;
         }
         break;
 

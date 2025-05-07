@@ -157,7 +157,7 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
             if (op.is_distinct)
             {
                 std::unordered_set<std::string> unique_values;
-                for (size_t i = 0; i < num_rows; ++i)
+                for (int64_t i = 0; i < static_cast<int64_t>(num_rows); ++i)
                 {
                     std::string val_str;
                     switch (col_type)
@@ -166,10 +166,24 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
                         val_str = table.getString(op.column_name, i);
                         break;
                     case ColumnType::INTEGER:
-                        val_str = std::to_string(table.getInteger(op.column_name, i));
+                        try
+                        {
+                            val_str = std::to_string(table.getInteger(op.column_name, i));
+                        }
+                        catch (...)
+                        {
+                            continue;
+                        }
                         break;
                     case ColumnType::DOUBLE:
-                        val_str = std::to_string(table.getDouble(op.column_name, i));
+                        try
+                        {
+                            val_str = std::to_string(table.getDouble(op.column_name, i));
+                        }
+                        catch (...)
+                        {
+                            continue;
+                        }
                         break;
                     case ColumnType::DATETIME:
                         val_str = unionValueToString(table.getRow(i)[table.getColumnIndex(op.column_name)], col_type);
@@ -187,16 +201,32 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
         else if (op.function_name == "sum" || op.function_name == "avg")
         {
             double total = 0.0;
-            size_t count = 0;
-            for (size_t i = 0; i < num_rows; ++i)
+            double count = 0;
+            for (int64_t i = 0; i < static_cast<int64_t>(num_rows); ++i)
             {
                 if (col_type == ColumnType::INTEGER)
                 {
-                    total += table.getInteger(op.column_name, i);
+                    try
+                    {
+                        int64_t val = i;
+                        total += table.getInteger(op.column_name, val);
+                    }
+                    catch (std::runtime_error)
+                    {
+                        continue;
+                    }
                 }
                 else if (col_type == ColumnType::DOUBLE)
                 {
-                    total += table.getDouble(op.column_name, i);
+                    try
+                    {
+                        int64_t val = i;
+                        total += table.getDouble(op.column_name, val);
+                    }
+                    catch (std::runtime_error)
+                    {
+                        continue;
+                    }
                 }
                 count++;
             }
@@ -222,7 +252,7 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
             if (col_type == ColumnType::STRING)
             {
                 std::string extreme = table.getString(op.column_name, 0);
-                for (size_t i = 1; i < num_rows; ++i)
+                for (int64_t i = 1; i < static_cast<int64_t>(num_rows); ++i)
                 {
                     std::string val = table.getString(op.column_name, i);
                     if (op.function_name == "min" ? val < extreme : val > extreme)
@@ -234,10 +264,29 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
             }
             else if (col_type == ColumnType::INTEGER)
             {
-                int64_t extreme = table.getInteger(op.column_name, 0);
-                for (size_t i = 1; i < num_rows; ++i)
+
+                int64_t extreme;
+                try
                 {
-                    int64_t val = table.getInteger(op.column_name, i);
+                    extreme = table.getInteger(op.column_name, 0);
+                }
+                catch (...)
+                {
+                    extreme = op.function_name == "min" ? INT64_MAX : INT64_MIN;
+                }
+
+                for (int64_t i = 1; i < static_cast<int64_t>(num_rows); ++i)
+                {
+                    int64_t val;
+                    try
+                    {
+                        val = table.getInteger(op.column_name, i);
+                    }
+                    catch (...)
+                    {
+                        continue;
+                    }
+
                     if (op.function_name == "min" ? val < extreme : val > extreme)
                     {
                         extreme = val;
@@ -247,10 +296,26 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
             }
             else if (col_type == ColumnType::DOUBLE)
             {
-                double extreme = table.getDouble(op.column_name, 0);
-                for (size_t i = 1; i < num_rows; ++i)
+                double extreme;
+                try
                 {
-                    double val = table.getDouble(op.column_name, i);
+                    extreme = table.getDouble(op.column_name, 0);
+                }
+                catch (...)
+                {
+                    extreme = op.function_name == "min" ? INT64_MAX : INT64_MIN;
+                }
+                for (int64_t i = 1; i < static_cast<int64_t>(num_rows); ++i)
+                {
+                    double val;
+                    try
+                    {
+                        val = table.getDouble(op.column_name, i);
+                    }
+                    catch (...)
+                    {
+                        continue;
+                    }
                     if (op.function_name == "min" ? val < extreme : val > extreme)
                     {
                         extreme = val;
@@ -262,7 +327,7 @@ std::shared_ptr<Table> AggregatorPlan::aggregateTable(
             {
                 const dateTime &first = table.getDateTime(op.column_name, 0);
                 dateTime extreme = first;
-                for (size_t i = 1; i < num_rows; ++i)
+                for (int64_t i = 1; i < num_rows; ++i)
                 {
                     const dateTime &val = table.getDateTime(op.column_name, i);
                     bool compare;
