@@ -860,8 +860,11 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
             }
             if (entry.first == "Filters")
             {
-                filters = simplifyCastExpressions(entry.second);
-                filters = insertAndBetweenComparisons(filters);
+                if (entry.second.find("optional:") == std::string::npos)
+                {
+                    filters = simplifyCastExpressions(entry.second);
+                    filters = insertAndBetweenConditions(filters);
+                }
             }
         }
         auto table = stmt->fromTable;
@@ -916,6 +919,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
             {
                 filter_condition_string = entry.second;
                 filter_condition_string = simplifyCastExpressions(filter_condition_string);
+                filter_condition_string = insertAndBetweenConditions(filter_condition_string);
             }
         }
 
