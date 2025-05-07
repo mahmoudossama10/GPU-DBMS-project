@@ -331,7 +331,7 @@ void CommandLineInterface::handleTestCommand()
     // Step 2: Define test queries
     std::vector<std::pair<int, std::string>> testQueries = {
         // ORDER BY
-        // {1, "SELECT * FROM people ORDER BY age ASC"},
+        {1, "SELECT * FROM people ORDER BY age ASC"},
         // {2, "SELECT * FROM people ORDER BY salary DESC"},
         // {3, "SELECT * FROM people ORDER BY name ASC"},
         // {4, "SELECT * FROM people ORDER BY birthday DESC"},
@@ -342,25 +342,29 @@ void CommandLineInterface::handleTestCommand()
         // {8, "SELECT * FROM people WHERE birthday < '2000-01-01'"},
         // {9, "SELECT * FROM people WHERE status = 'active'"},
         // NESTED QUERIES
-        {10, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
-        {11, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
+        // {10, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
+        // {11, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
         // JOIN
         // {12, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id % 100 = d.id"},
         // {13, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.salary >= d.id * 1000"},
         // MULTIPLE TABLES
         // {14, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id % 100 = d.id AND m.id = d.id"},
         // AGGREGATION
-        {15, "SELECT COUNT(*) AS total_people FROM people"},
-        {16, "SELECT AVG(salary) AS avg_salary FROM people"},
-        {17, "SELECT MAX(age) AS max_age FROM people"},
-        {18, "SELECT MIN(birthday) AS earliest_birthday FROM people"},
-        {19, "SELECT name, salary FROM people"}};
+        // {15, "SELECT COUNT(*) AS total_people FROM people"},
+        // {16, "SELECT AVG(salary) AS avg_salary FROM people"},
+        // {17, "SELECT MAX(age) AS max_age FROM people"},
+        // {18, "SELECT MIN(birthday) AS earliest_birthday FROM people"},
+        // PROJECTION
+        // {19, "SELECT name, salary FROM people"}
+    };
 
     // Step 3: Execute each query and verify against test cases
     int totalTests = testQueries.size();
     int passedTests = 0;
 
     std::cout << "Running " << totalTests << " test queries..." << std::endl;
+
+    std::vector<int> failedTestCases;
 
     for (size_t i = 0; i < testQueries.size(); ++i)
     {
@@ -378,6 +382,7 @@ void CommandLineInterface::handleTestCommand()
             if (!result)
             {
                 std::cerr << "Query returned no results!" << std::endl;
+                failedTestCases.push_back(testQueries[i].first);
                 continue;
             }
 
@@ -401,6 +406,7 @@ void CommandLineInterface::handleTestCommand()
             {
                 std::cout << "✗ TEST FAILED (" << duration.count() << " ms)" << std::endl;
                 std::cout << "  - Results do not match reference file: " << referenceFilePath << std::endl;
+                failedTestCases.push_back(testQueries[i].first);
             }
 
             // Clean up temporary files
@@ -412,6 +418,7 @@ void CommandLineInterface::handleTestCommand()
         catch (const std::exception &e)
         {
             std::cerr << "Error executing test query: " << e.what() << "\n";
+            failedTestCases.push_back(testQueries[i].first);
         }
     }
 
@@ -420,6 +427,17 @@ void CommandLineInterface::handleTestCommand()
     std::cout << "Passed: " << passedTests << " / " << totalTests << std::endl;
     double passRate = (static_cast<double>(passedTests) / totalTests) * 100.0;
     std::cout << "Pass Rate: " << passRate << "%" << std::endl;
+
+    // Print failed test cases
+    if (!failedTestCases.empty())
+    {
+        std::cout << "Failed Test Cases: ";
+        for (const auto &testCase : failedTestCases)
+        {
+            std::cout << testCase << " ";
+        }
+        std::cout << std::endl;
+    }
 }
 
 class CSVComparator

@@ -47,12 +47,15 @@ namespace UnionUtils
         {
         case ColumnType::STRING:
             copy.s = (value.s != nullptr) ? new std::string(*value.s) : nullptr;
+            copy.is_null = value.is_null;
             break;
         case ColumnType::INTEGER:
             copy.i = value.i;
+            copy.is_null = value.is_null;
             break;
         case ColumnType::DOUBLE:
             copy.d = value.d;
+            copy.is_null = value.is_null;
             break;
         case ColumnType::DATETIME:
             if (value.t != nullptr)
@@ -64,6 +67,7 @@ namespace UnionUtils
             {
                 copy.t = nullptr;
             }
+            copy.is_null = value.is_null;
             break;
         }
 
