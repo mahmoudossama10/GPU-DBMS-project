@@ -20,6 +20,8 @@ public:
     void displayHelp();
     std::string getInput();
     void cleanupBatchTables();
+    void handleTestCommand();
+    bool compareCSVFiles(const std::string &file1, const std::string &file2);
 
     std::shared_ptr<StorageManager> storageManager;
     std::vector<std::string> commandHistory;

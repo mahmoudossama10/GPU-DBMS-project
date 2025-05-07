@@ -770,7 +770,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     for (int i = 0; i < table_names.size(); i++)
     {
         std::string rename_query = "ALTER TABLE " + table_names[i] + " RENAME COLUMN \"" + column_names[i] + "\" TO " + replaced_patterns[i] + ";";
-        std::cout << rename_query << '\n';
+        // std::cout << rename_query << '\n';
         con.Query(rename_query);
     }
     // std::cout << "Table Name -> Alias Mappings:\n";
