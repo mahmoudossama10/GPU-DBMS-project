@@ -32,6 +32,8 @@ public:
     // Methods for row-major format
     static CSVData loadCSV(const std::string &filepath);
     static std::vector<ColumnType> inferTypes(const std::string& row);
+    // Add to your class declaration in the header file
+    static std::pair<std::string, ColumnType> parseColumnHeader(const std::string& header);
 
     static void saveCSV(const std::string &filepath,
                         const std::vector<std::string> &headers,
@@ -55,4 +57,4 @@ private:
     static dateTime *parseDateTime(const std::string &datetime);
 };
 
-#endif // CSV_PROCESSOR_HPP
+#endif 
