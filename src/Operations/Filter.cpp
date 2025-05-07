@@ -101,70 +101,53 @@ std::shared_ptr<Table> Filter::apply(
     for (const auto &header : headers)
     {
         filteredColumnData[header] = std::vector<unionV>();
+        filteredColumnData[header].reserve(rowCount);
     }
 
     // Process each row and add matching rows to the filtered data
     for (int rowIndex = 0; rowIndex < rowCount; ++rowIndex)
     {
-        if (evaluateCondition(table, rowIndex, condition))
+        bool matches = true;
+
+        try
+        {
+            matches = evaluateCondition(table, rowIndex, condition);
+        }
+        catch (const std::exception &e)
+        {
+            // Log or handle the exception from evaluateCondition
+            std::cerr << "Error evaluating condition for row " << rowIndex
+                      << ": " << e.what() << std::endl;
+            continue; // Skip this row and continue
+        }
+        if (matches)
         {
             // For each matching row, add its values to the filtered data
             for (const auto &header : headers)
             {
                 ColumnType type = table->getColumnType(header);
                 const auto &sourceData = table->getData().at(header);
-                unionV value = sourceData[rowIndex];
+                const unionV &value = sourceData[rowIndex];
+
+                unionV copy = {};
 
                 // Create a deep copy of the union value if needed
                 switch (type)
                 {
                 case ColumnType::STRING:
-                {
-                    unionV copy = {};
-                    copy.i = new TheInteger();
-                    copy.d = new TheDouble();
                     copy.s = (value.s != nullptr) ? new std::string(*value.s) : nullptr;
-                    filteredColumnData[header].push_back(copy);
-                }
-                break;
+                    break;
                 case ColumnType::DATETIME:
-                {
-                    unionV copy = {};
-                    copy.i = new TheInteger();
-                    copy.d = new TheDouble();
-                    if (value.t != nullptr)
-                    {
-                        copy.t = new dateTime;
-                        *copy.t = *value.t;
-                    }
-                    else
-                    {
-                        copy.t = nullptr;
-                    }
-                    filteredColumnData[header].push_back(copy);
-                }
-                break;
+                    copy.t = (value.t != nullptr) ? new dateTime(*value.t) : nullptr;
+                    break;
                 case ColumnType::INTEGER:
-                {
-                    unionV copy = {};
-                    copy.i = new TheInteger();
-                    copy.d = new TheDouble();
-                    copy.i->value = value.i->value;
-                    copy.i->is_null = value.i->is_null;
-                    filteredColumnData[header].push_back(copy);
-                }
-                break;
+                    copy.i = new TheInteger{value.i->value, value.i->is_null};
+                    break;
                 case ColumnType::DOUBLE:
-                {
-                    unionV copy = {};
-                    copy.i = new TheInteger();
-                    copy.d = new TheDouble();
-                    copy.d->value = value.d->value;
-                    copy.d->is_null = value.d->is_null;
-                    filteredColumnData[header].push_back(copy);
+                    copy.d = new TheDouble{value.d->value, value.d->is_null};
+                    break;
                 }
-                break;
-                }
+                filteredColumnData[header].push_back(copy);
             }
         }
     }

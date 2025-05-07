@@ -331,18 +331,18 @@ void CommandLineInterface::handleTestCommand()
     // Step 2: Define test queries
     std::vector<std::pair<int, std::string>> testQueries = {
         // ORDER BY
-        {1, "SELECT * FROM people ORDER BY age ASC"},
+        // {1, "SELECT * FROM people ORDER BY age ASC"},
         // {2, "SELECT * FROM people ORDER BY salary DESC"},
         // {3, "SELECT * FROM people ORDER BY name ASC"},
         // {4, "SELECT * FROM people ORDER BY birthday DESC"},
         // FILTERING
-        // {5, "SELECT * FROM people WHERE age > 30"},
+        {5, "SELECT * FROM people WHERE age > 30"},
         // {6, "SELECT * FROM people WHERE salary >= 60000"},
         // {7, "SELECT * FROM people WHERE name != 'Osama'"},
         // {8, "SELECT * FROM people WHERE birthday < '2000-01-01'"},
         // {9, "SELECT * FROM people WHERE status = 'active'"},
         // NESTED QUERIES
-        {10, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
+        // {10, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
         // {11, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
         // JOIN
         // {12, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id % 100 = d.id"},
