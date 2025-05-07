@@ -696,7 +696,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
     }
 
     // 2. Find additional tables in comma-separated list (e.g., "table1, table2 t2, table3 t3")
-    std::regex comma_pattern(R"((?:FROM|,)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:AS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*,|\s+WHERE|$))");
+    std::regex comma_pattern(R"((?:FROM|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+(?:AS\s+)?([a-zA-Z_][a-zA-Z0-9_]*))?(?=\s*,|\s+WHERE|$))");
     std::smatch comma_match;
     std::string::const_iterator comma_search(sql_query.cbegin());
 

@@ -305,7 +305,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
         hsql::SQLParser::parse(subQuery.modified_query, &result2);
         const auto *stmt2 = result2.getStatement(0);
 
-        std::string outputPath = "../../data/input/sub_query_new.csv";
+        std::string outputPath = "../../data/input/sub_query.csv";
         CSVProcessor::saveCSV(outputPath, resultTable->getHeaders(), resultTable->getData(), resultTable->getColumnTypes()); // CSVProcessor needs to be updated too
         std::cout << "Saved output to '" << outputPath << "'\n";
 
@@ -753,7 +753,6 @@ void QueryExecutor::generateBatchCombinationsRecursive(
         generateBatchCombinationsRecursive(tableGroups, newCombination, nextGroup, result);
     }
 }
-
 std::string QueryExecutor::replaceTableNameInQuery(const std::string &query,
                                                    const std::string &oldName,
                                                    const std::string &newName,
@@ -761,11 +760,13 @@ std::string QueryExecutor::replaceTableNameInQuery(const std::string &query,
 {
     std::string modifiedQuery = query;
 
+    size_t pos = 0;
+
     // If oldAlias is empty, simply replace all occurrences of oldName with newName
     // making sure they are standalone identifiers
     if (oldAlias.empty())
     {
-        size_t pos = 0;
+        pos = 0;
         while ((pos = modifiedQuery.find(oldName, pos)) != std::string::npos)
         {
             // Check if this is a standalone occurrence of the table name
@@ -777,9 +778,10 @@ std::string QueryExecutor::replaceTableNameInQuery(const std::string &query,
                 isStandalone = false;
             }
 
-            // Check if followed by non-identifier character
-            if (pos + oldName.length() < modifiedQuery.length() &&
-                (isalnum(modifiedQuery[pos + oldName.length()]) || modifiedQuery[pos + oldName.length()] == '_'))
+            // Check if followed by non-identifier character or end of string
+            size_t endPos = pos + oldName.length();
+            if (endPos < modifiedQuery.length() &&
+                (isalnum(modifiedQuery[endPos]) || modifiedQuery[endPos] == '_'))
             {
                 isStandalone = false;
             }
@@ -792,122 +794,156 @@ std::string QueryExecutor::replaceTableNameInQuery(const std::string &query,
             }
             else
             {
-                pos += oldName.length(); // Skip if not standalone
+                pos += 1; // Skip just one character to find potential matches later
             }
         }
 
         return modifiedQuery;
     }
 
-    size_t pos = 0;
-    while ((pos = modifiedQuery.find(oldName, pos)) != std::string::npos)
-    {
-        // Check if the table name is followed by " AS " and then the alias
-        size_t asPos = modifiedQuery.find(" AS ", pos + oldName.length());
-
-        if (asPos != std::string::npos)
-        {
-            size_t aliasPos = modifiedQuery.find(oldAlias, asPos + 4); // +4 to skip " AS "
-
-            if (aliasPos != std::string::npos)
-            {
-                // Make sure alias is a standalone part (not part of another identifier)
-                bool isStandalone = true;
-                if (aliasPos > 0 && (isalnum(modifiedQuery[aliasPos - 1]) || modifiedQuery[aliasPos - 1] == '_'))
-                {
-                    isStandalone = false;
-                }
-                if (aliasPos + oldAlias.length() < modifiedQuery.length() &&
-                    (isalnum(modifiedQuery[aliasPos + oldAlias.length()]) || modifiedQuery[aliasPos + oldAlias.length()] == '_'))
-                {
-                    isStandalone = false;
-                }
-
-                if (isStandalone)
-                {
-                    // Replace the table name only if " AS <alias>" is found
-                    modifiedQuery.replace(pos, oldName.length(), newName);
-                    pos += newName.length(); // Move position forward to avoid multiple replacements
-                }
-                else
-                {
-                    pos += oldName.length(); // If alias isn't standalone, skip
-                }
-            }
-            else
-            {
-                pos += oldName.length(); // Skip if alias isn't found after " AS "
-            }
-        }
-        else
-        {
-            pos += oldName.length(); // Skip if " AS " isn't found after the table name
-        }
-    }
+    // First pass: Find table name with explicit AS alias
     pos = 0;
     while ((pos = modifiedQuery.find(oldName, pos)) != std::string::npos)
     {
-        size_t asPos = modifiedQuery.find(" ", pos + oldName.length()); // Find the first space after the table name
+        // Check if this is a standalone occurrence of the table name
+        bool isStandalone = true;
 
-        if (asPos != std::string::npos)
+        // Check if preceded by non-identifier character
+        if (pos > 0 && (isalnum(modifiedQuery[pos - 1]) || modifiedQuery[pos - 1] == '_'))
         {
-            // Check if the next part is a valid alias (it should be a valid identifier)
-            size_t aliasPos = asPos + 1; // Skip the space after the table name
+            isStandalone = false;
+        }
 
-            // Find the end of the alias (it should either be followed by a space or end of string)
-            size_t aliasEndPos = modifiedQuery.find_first_of(",", aliasPos);
-            if (aliasEndPos == std::string::npos)
+        // Check if followed by non-identifier character or end of string
+        size_t endPos = pos + oldName.length();
+        if (endPos < modifiedQuery.length() &&
+            (isalnum(modifiedQuery[endPos]) || modifiedQuery[endPos] == '_'))
+        {
+            isStandalone = false;
+        }
+
+        if (!isStandalone)
+        {
+            pos += 1; // Skip just one character to find potential matches later
+            continue;
+        }
+
+        // Check if the table name is followed by " AS " and then the alias
+        size_t asPos = modifiedQuery.find(" AS ", pos + oldName.length());
+
+        if (asPos != std::string::npos && asPos == pos + oldName.length())
+        {
+            size_t aliasPos = asPos + 4; // +4 to skip " AS "
+            size_t aliasEndPos = aliasPos + oldAlias.length();
+
+            // Check if the alias matches and is standalone
+            if (modifiedQuery.substr(aliasPos, oldAlias.length()) == oldAlias &&
+                (aliasEndPos >= modifiedQuery.length() ||
+                 !(isalnum(modifiedQuery[aliasEndPos]) || modifiedQuery[aliasEndPos] == '_')))
             {
-                aliasEndPos = modifiedQuery.find_first_of(" ", aliasPos);
-            }
-            if (aliasEndPos == std::string::npos)
-            {
-                aliasEndPos = modifiedQuery.length(); // Alias goes till the end of the string
-            }
-
-            // Extract the alias
-            std::string foundAlias = modifiedQuery.substr(aliasPos, aliasEndPos - aliasPos);
-
-            // Check if the found alias matches the old alias
-            if (foundAlias == oldAlias)
-            {
-                // Ensure the alias is standalone (not part of another identifier)
-                bool isStandalone = true;
-                if (aliasPos > 0 && (isalnum(modifiedQuery[aliasPos - 1]) || modifiedQuery[aliasPos - 1] == '_'))
-                {
-                    isStandalone = false; // Alias isn't standalone if preceded by alphanumeric or '_'
-                }
-                if (aliasEndPos < modifiedQuery.length() &&
-                    (isalnum(modifiedQuery[aliasEndPos]) || modifiedQuery[aliasEndPos] == '_'))
-                {
-                    isStandalone = false; // Alias isn't standalone if followed by alphanumeric or '_'
-                }
-
-                if (isStandalone)
-                {
-                    // Replace the table name only if alias is found and is valid
-                    modifiedQuery.replace(pos, oldName.length(), newName);
-                    pos += newName.length(); // Move position forward to avoid multiple replacements
-                }
-                else
-                {
-                    pos += oldName.length(); // If alias isn't standalone, skip
-                }
+                // Replace the table name
+                modifiedQuery.replace(pos, oldName.length(), newName);
+                pos += newName.length(); // Move position forward
             }
             else
             {
-                pos += oldName.length(); // Skip if the alias doesn't match
+                pos += oldName.length(); // Skip this occurrence
             }
         }
         else
         {
-            pos += oldName.length(); // Skip if no space is found after table name
+            pos += oldName.length(); // Skip if " AS " isn't found immediately after the table name
+        }
+    }
+
+    // Second pass: Find table name with implicit alias (without AS keyword)
+    pos = 0;
+    while ((pos = modifiedQuery.find(oldName, pos)) != std::string::npos)
+    {
+        // Check if this is a standalone occurrence of the table name
+        bool isStandalone = true;
+
+        // Check if preceded by non-identifier character
+        if (pos > 0 && (isalnum(modifiedQuery[pos - 1]) || modifiedQuery[pos - 1] == '_'))
+        {
+            isStandalone = false;
+        }
+
+        // Check if followed by non-identifier character or end of string
+        size_t endPos = pos + oldName.length();
+        if (endPos < modifiedQuery.length() &&
+            (isalnum(modifiedQuery[endPos]) || modifiedQuery[endPos] == '_'))
+        {
+            isStandalone = false;
+        }
+
+        if (!isStandalone)
+        {
+            pos += 1; // Skip just one character to find potential matches later
+            continue;
+        }
+
+        // Check if the table name is followed by space and then directly by the alias
+        if (endPos < modifiedQuery.length() && modifiedQuery[endPos] == ' ')
+        {
+            size_t aliasPos = endPos + 1; // Skip the space after the table name
+
+            // Check if this space is followed by the alias
+            if (aliasPos + oldAlias.length() <= modifiedQuery.length() &&
+                modifiedQuery.substr(aliasPos, oldAlias.length()) == oldAlias)
+            {
+                // Check if the alias is standalone
+                size_t aliasEndPos = aliasPos + oldAlias.length();
+                if (aliasEndPos >= modifiedQuery.length() ||
+                    !(isalnum(modifiedQuery[aliasEndPos]) || modifiedQuery[aliasEndPos] == '_'))
+                {
+                    // Replace the table name
+                    modifiedQuery.replace(pos, oldName.length(), newName);
+                    pos += newName.length(); // Move position forward
+                    continue;
+                }
+            }
+        }
+
+        // Check if we have a comma-separated list and need to look for an alias
+        size_t commaPos = modifiedQuery.find(",", pos + oldName.length());
+        if (commaPos != std::string::npos &&
+            modifiedQuery.find_first_not_of(" \t", pos + oldName.length()) == commaPos)
+        {
+            // Found a comma right after the table name (with optional spaces)
+            // This is a standalone table reference without an alias
+            modifiedQuery.replace(pos, oldName.length(), newName);
+            pos += newName.length();
+        }
+        else
+        {
+            // Check for other clause keywords
+            std::vector<std::string> clauses = {" WHERE ", " FROM ", " JOIN ", " ON ", " GROUP ", " HAVING ", " ORDER ", " LIMIT "};
+            bool foundClause = false;
+
+            for (const auto &clause : clauses)
+            {
+                size_t clausePos = modifiedQuery.find(clause, pos + oldName.length());
+                if (clausePos != std::string::npos &&
+                    modifiedQuery.find_first_not_of(" \t", pos + oldName.length()) == clausePos)
+                {
+                    // Found a SQL clause right after the table name
+                    modifiedQuery.replace(pos, oldName.length(), newName);
+                    pos += newName.length();
+                    foundClause = true;
+                    break;
+                }
+            }
+
+            if (!foundClause)
+            {
+                pos += oldName.length(); // Skip this occurrence
+            }
         }
     }
 
     return modifiedQuery;
 }
-
 void QueryExecutor::cleanupBatchTables()
 {
     // Collect table names first to avoid modifying the map while iterating
