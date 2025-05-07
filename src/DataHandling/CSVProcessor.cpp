@@ -6,160 +6,373 @@
 #include <filesystem>
 #include <regex>
 #include <sys/stat.h>
+#include <omp.h>
+
 
 // Default constructor
 CSVProcessor::CSVProcessor()
 {
     // Default initialization
 }
+
+// Ensure you have a matching inferTypes function adapted from your friend's approach
+
+std::vector<ColumnType> CSVProcessor::inferTypes(const std::string& row) {
+
+    std::vector<ColumnType> types;
+
+    auto fields = parseCSVLine(row);
+
+
+    for (const auto& field: fields) {
+
+        try {
+
+            auto int_val = std::stoll(field);
+
+            types.push_back(ColumnType::INTEGER);
+
+            continue;
+
+        } catch (...) {}
+
+
+        try {
+
+            auto double_val = std::stod(field);
+
+            types.push_back(ColumnType::DOUBLE);
+
+            continue;
+
+        } catch (...) {}
+
+
+        types.push_back(ColumnType::STRING);
+
+    }
+
+
+    return types;
+
+}
+
 CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 {
+    // Step 1: Read all lines into memory
+
+    std::vector<std::string> lines;
 
     std::ifstream file(filepath);
+
     if (!file.is_open())
+
     {
-        throw std::runtime_error("Failed to open file: " + filepath);
+
+        throw std::runtime_error("Unable to open file: " + filepath);
+
     }
 
-    std::vector<std::string> headers;
-    std::unordered_map<std::string, std::vector<unionV>> columnData;
-    std::unordered_map<std::string, ColumnType> columnTypeMap;
+
     std::string line;
 
-    // Read headers
-    if (std::getline(file, line))
-    {
-        headers = parseCSVLine(line);
-
-        // Initialize column vectors
-        for (const auto &header : headers)
-        {
-            columnData[header] = std::vector<unionV>();
-            // Default to STRING type initially
-            columnTypeMap[header] = ColumnType::STRING;
-        }
-    }
-
-    // First pass: Read a sample of data to determine column types
-    const size_t SAMPLE_SIZE = 10; // Sample first 10 rows to determine types
-    std::vector<std::vector<std::string>> sampleRows;
-    size_t sampleCount = 0;
-
-    // Store current position to rewind after sampling
-    std::streampos initialPos = file.tellg();
-
-    while (std::getline(file, line) && sampleCount < SAMPLE_SIZE)
-    {
-        auto row = parseCSVLine(line);
-        if (row.size() == headers.size()) // Skip malformed rows
-        {
-            sampleRows.push_back(row);
-            sampleCount++;
-        }
-    }
-
-    // Analyze sample data to determine column types
-    for (size_t i = 0; i < headers.size(); ++i)
-    {
-        const std::string &header = headers[i];
-        bool canBeInt = true;
-        bool canBeDouble = true;
-        bool canBeBool = true;
-
-        for (const auto &row : sampleRows)
-        {
-            const std::string &value = row[i];
-
-            // Skip empty values when determining type
-            if (value.empty())
-                continue;
-
-            // Check if can be boolean
-            if (canBeBool)
-            {
-                std::string valueLower = value;
-                std::transform(valueLower.begin(), valueLower.end(), valueLower.begin(),
-                               [](unsigned char c)
-                               { return std::tolower(c); });
-                if (valueLower != "true" && valueLower != "false" &&
-                    valueLower != "1" && valueLower != "0" &&
-                    valueLower != "yes" && valueLower != "no" &&
-                    valueLower != "y" && valueLower != "n")
-                {
-                    canBeBool = false;
-                }
-            }
-
-            // Check if can be integer
-            if (canBeInt)
-            {
-                try
-                {
-                    size_t pos = 0;
-                    std::stoi(value, &pos);
-                    if (pos != value.length()) // Not the entire string was consumed
-                        canBeInt = false;
-                }
-                catch (...)
-                {
-                    canBeInt = false;
-                }
-            }
-
-            // Check if can be double
-            if (canBeDouble && !canBeInt) // Try double only if not integer
-            {
-                try
-                {
-                    size_t pos = 0;
-                    std::stod(value, &pos);
-                    if (pos != value.length()) // Not the entire string was consumed
-                        canBeDouble = false;
-                }
-                catch (...)
-                {
-                    canBeDouble = false;
-                }
-            }
-        }
-
-        // Determine the most specific type that fits all values
-        if (canBeInt)
-            columnTypeMap[header] = ColumnType::INTEGER;
-        else if (canBeDouble)
-            columnTypeMap[header] = ColumnType::DOUBLE;
-        else
-            columnTypeMap[header] = ColumnType::STRING;
-    }
-
-    // Rewind file to read full data with determined types
-    file.clear(); // Clear any error flags
-    file.seekg(initialPos);
-
-    // Read all data rows with the determined types
-    size_t rowCount = 0;
     while (std::getline(file, line))
+
     {
-        auto row = parseCSVLine(line);
-        if (row.size() != headers.size())
+
+        if (!line.empty() && line.back() == '\r')
+
         {
-            throw std::runtime_error("CSV row has different column count than header");
+
+            line.pop_back();
+
         }
-        if (rowCount > 106)
+
+        if (!line.empty())
+
         {
-            int lol = 5;
-            int z = 5;
+
+            lines.push_back(line);
+
         }
-        // Add each field to its respective column with proper type conversion
-        for (size_t i = 0; i < headers.size(); ++i)
-        {
-            const std::string &header = headers[i];
-            ColumnType type = columnTypeMap[header];
-            unionV value = convertToUnionV(row[i], type);
-            columnData[header].push_back(value);
-        }
-        rowCount++;
+
     }
+
+    file.close();
+
+
+    if (lines.empty())
+
+    {
+
+        return {std::vector<std::string>(), std::unordered_map<std::string, std::vector<unionV>>(), std::unordered_map<std::string, ColumnType>()};
+
+    }
+
+
+    // Step 2: Parse headers from the first line
+
+    std::vector<std::string> headers = parseCSVLine(lines[0]);
+
+
+    // Step 3: Infer types from the second row (or a small sample for robustness)
+
+    std::vector<ColumnType> types(headers.size(), ColumnType::STRING);
+
+    if (lines.size() > 1)
+
+    {
+
+        // Use a small sample (up to 5 rows) for type inference, balancing speed and accuracy
+
+        const size_t SAMPLE_SIZE = 5;
+
+        std::vector<std::vector<std::string>> sampleRows;
+
+        for (size_t i = 1; i < lines.size() && sampleRows.size() < SAMPLE_SIZE; ++i)
+
+        {
+
+            auto row = parseCSVLine(lines[i]);
+
+            if (row.size() == headers.size())
+
+            {
+
+                sampleRows.push_back(row);
+
+            }
+
+        }
+
+
+        for (size_t col = 0; col < headers.size(); ++col)
+
+        {
+
+            bool canBeInt = true;
+
+            bool canBeDouble = true;
+
+
+            for (const auto& row : sampleRows)
+
+            {
+
+                const std::string& value = row[col];
+
+                if (value.empty())
+
+                    continue;
+
+
+                if (canBeInt)
+
+                {
+
+                    try
+
+                    {
+
+                        size_t pos = 0;
+
+                        std::stoi(value, &pos);
+
+                        if (pos != value.length())
+
+                            canBeInt = false;
+
+                    }
+
+                    catch (...)
+
+                    {
+
+                        canBeInt = false;
+
+                    }
+
+                }
+
+
+                if (canBeDouble && !canBeInt)
+
+                {
+
+                    try
+
+                    {
+
+                        size_t pos = 0;
+
+                        std::stod(value, &pos);
+
+                        if (pos != value.length())
+
+                            canBeDouble = false;
+
+                    }
+
+                    catch (...)
+
+                    {
+
+                        canBeDouble = false;
+
+                    }
+
+                }
+
+            }
+
+
+            if (canBeInt)
+
+                types[col] = ColumnType::INTEGER;
+
+            else if (canBeDouble)
+
+                types[col] = ColumnType::DOUBLE;
+
+            else
+
+                types[col] = ColumnType::STRING;
+
+        }
+
+    }
+
+
+    // Step 4: Pre-allocate storage for data (array-like for parallelism)
+
+    size_t rowCount = lines.size() > 1 ? lines.size() - 1 : 0;
+
+    std::vector<std::vector<unionV>> tempData(headers.size());
+
+    for (size_t col = 0; col < headers.size(); ++col)
+
+    {
+
+        tempData[col].resize(rowCount); // Pre-allocate space for each column
+
+    }
+
+
+    // Step 5: Parallel processing of rows into pre-allocated vectors
+
+#pragma omp parallel for schedule(static)
+
+    for (size_t i = 1; i < lines.size(); ++i)
+
+    {
+
+        auto vals = parseCSVLine(lines[i]);
+
+        if (vals.size() != headers.size())
+
+        {
+
+#pragma omp critical
+
+            {
+
+                throw std::runtime_error("Wrong number of columns in file: " + filepath + ", line " + std::to_string(i + 1));
+
+            }
+
+        }
+
+
+        for (size_t col = 0; col < headers.size(); ++col)
+
+        {
+
+            unionV value;
+
+            switch (types[col])
+
+            {
+
+            case ColumnType::INTEGER:
+
+                try
+
+                {
+
+                    value.i = std::stoll(vals[col]);
+
+                }
+
+                catch (...)
+
+                {
+
+                    value.i = 0; // Default value
+
+                }
+
+                break;
+
+
+            case ColumnType::DOUBLE:
+
+                try
+
+                {
+
+                    value.d = std::stod(vals[col]);
+
+                }
+
+                catch (...)
+
+                {
+
+                    value.d = 0.0; // Default value
+
+                }
+
+                break;
+
+
+            case ColumnType::STRING:
+
+                value.s = new std::string(vals[col]);
+
+                break;
+
+
+            case ColumnType::DATETIME:
+
+                value.t = parseDateTime(vals[col]);
+
+                break;
+
+            }
+
+            tempData[col][i - 1] = value; // Direct indexing, thread-safe due to pre-allocation
+
+        }
+
+    }
+
+
+    // Step 6: Convert temporary array structure to CSVData format
+
+    std::unordered_map<std::string, std::vector<unionV>> columnData;
+
+    std::unordered_map<std::string, ColumnType> columnTypeMap;
+
+    for (size_t col = 0; col < headers.size(); ++col)
+
+    {
+
+        columnData[headers[col]] = std::move(tempData[col]); // Move pre-allocated vector
+
+        columnTypeMap[headers[col]] = types[col];
+
+    }
+
 
     return {headers, columnData, columnTypeMap};
 }
@@ -167,13 +380,92 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
 {
     std::vector<std::string> result;
-    std::stringstream ss(line);
+
     std::string field;
 
-    while (std::getline(ss, field, ','))
+    bool inQuotes = false;
+
+
+    for (size_t i = 0; i < line.length(); ++i)
+
     {
-        result.push_back(StringUtils::trim(field));
+
+        char c = line[i];
+
+
+        if (inQuotes)
+
+        {
+
+            if (c == '"')
+
+            {
+
+                if (i + 1 < line.length() && line[i + 1] == '"')
+
+                {
+
+                    field += '"'; // Escaped quote
+
+                    ++i;
+
+                }
+
+                else
+
+                {
+
+                    inQuotes = false; // End of quoted field
+
+                }
+
+            }
+
+            else
+
+            {
+
+                field += c;
+
+            }
+
+        }
+
+        else
+
+        {
+
+            if (c == '"')
+
+            {
+
+                inQuotes = true;
+
+            }
+
+            else if (c == ',')
+
+            {
+
+                result.push_back(field);
+
+                field.clear();
+
+            }
+
+            else
+
+            {
+
+                field += c;
+
+            }
+
+        }
+
     }
+
+    result.push_back(field); // Add the last field
 
     return result;
 }

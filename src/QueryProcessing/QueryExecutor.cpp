@@ -365,7 +365,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     // std::vector<std::string> allTableNames = storage_->getTableNames();
 
     // Constant for batch size
-    size_t BATCH_SIZE = 500;
+    size_t BATCH_SIZE = 1;
     if (allTableNamesOriginal.size() == 1)
     {
         BATCH_SIZE = storage_->getTable(allTableNamesOriginal[0]).getSize();
