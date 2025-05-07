@@ -6,10 +6,13 @@
 #include "../DataHandling/StorageManager.hpp"
 #include "../QueryProcessing/QueryExecutor.hpp"
 
+#include "../../libs/linenoise-ng-master/include/linenoise.h"
+
 class CommandLineInterface
 {
 public:
     CommandLineInterface();
+    ~CommandLineInterface();
     void run();
 
 private:
@@ -17,7 +20,10 @@ private:
     void handleLoadCommand(const std::vector<std::string> &args);
     void handleShowTablesCommand();
     void displayHelp();
+    std::string getInput();
     void cleanupBatchTables();
 
     std::shared_ptr<StorageManager> storageManager;
+    std::vector<std::string> commandHistory;
+    size_t historyIndex;
 };
