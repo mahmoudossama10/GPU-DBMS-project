@@ -305,9 +305,9 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
         hsql::SQLParser::parse(subQuery.modified_query, &result2);
         const auto *stmt2 = result2.getStatement(0);
 
-        std::string outputPath = "../../data/input/sub_query.csv";
+        std::string outputPath = storage_->inputDirectory + "sub_query.csv";
         CSVProcessor::saveCSV(outputPath, resultTable->getHeaders(), resultTable->getData(), resultTable->getColumnTypes()); // CSVProcessor needs to be updated too
-        std::cout << "Saved output to '" << outputPath << "'\n";
+        // std::cout << "Saved output to '" << outputPath << "'\n";
 
         cleanupBatchTables();
         return execute(static_cast<const hsql::SelectStatement *>(stmt2), subQuery.modified_query);
@@ -394,7 +394,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
         for (size_t batchIdx = 0; batchIdx < numBatches; batchIdx++)
         {
             std::string batchTableName = allTableNames[i] + "_batch0_" + std::to_string(batchIdx);
-            std::cout << batchTableName << '\n';
+            // std::cout << batchTableName << '\n';
             // Skip if this batch already exists
             if (storage_->tableExists(batchTableName))
             {

@@ -166,7 +166,7 @@ void CommandLineInterface::processQuery(const std::string &query)
 {
     try
     {
-        auto start = high_resolution_clock::now();
+        // auto start = high_resolution_clock::now();
 
         QueryExecutor executor(storageManager);
         std::shared_ptr<Table> result = executor.execute(query);
@@ -239,15 +239,15 @@ void CommandLineInterface::processQuery(const std::string &query)
             std::cout << totalRows << " rows returned\n";
 
             // Save full results to CSV
-            std::string outputPath = "../../data/output/query_output.csv";
+            std::string outputPath = "Team7_query.csv";
             CSVProcessor::saveCSV(outputPath, result->getHeaders(), columnData, columnTypes); // CSVProcessor needs to be updated too
             std::cout << "Saved output to '" << outputPath << "'\n";
 
-            auto end = high_resolution_clock::now();
+            // auto end = high_resolution_clock::now();
 
-            auto duration = duration_cast<milliseconds>(end - start);
+            // auto duration = duration_cast<milliseconds>(end - start);
 
-            std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+            // std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
             cleanupBatchTables();
             result.reset();
         }
@@ -273,22 +273,22 @@ void CommandLineInterface::handleLoadCommand(const std::vector<std::string> &arg
     const std::string &tableName = args[0];
     const std::string &filepath = args[1];
 
-    auto start = high_resolution_clock::now();
+    // auto start = high_resolution_clock::now();
 
     try
     {
         storageManager->loadTable(tableName, filepath);
-        std::cout << "Loaded table '" << tableName << "' from " << filepath << "\n";
+        // std::cout << "Loaded table '" << tableName << "' from " << filepath << "\n";
     }
     catch (const std::exception &e)
     {
         std::cerr << "Error loading table: " << e.what() << "\n";
     }
-    auto end = high_resolution_clock::now();
+    // auto end = high_resolution_clock::now();
 
-    auto duration = duration_cast<milliseconds>(end - start);
+    // auto duration = duration_cast<milliseconds>(end - start);
 
-    std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+    // std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
 }
 
 void CommandLineInterface::handleShowTablesCommand()

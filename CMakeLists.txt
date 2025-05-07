@@ -34,15 +34,15 @@ file(GLOB_RECURSE CU_SOURCES
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Define executable, .cpp and .cu together
-add_executable(sql_processor ${CPP_SOURCES} ${CU_SOURCES})
+add_executable(main ${CPP_SOURCES} ${CU_SOURCES})
 
 # CUDA requirements for proper linking:
-set_target_properties(sql_processor PROPERTIES
+set_target_properties(main PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_ARCHITECTURES "80" # (or set for your GPU: 52 for Maxwell, 60/61 for Pascal, etc.)
 )
 
-set_target_properties(sql_processor PROPERTIES
+set_target_properties(main PROPERTIES
         LINKER_LANGUAGE CUDA
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
@@ -50,21 +50,21 @@ set_target_properties(sql_processor PROPERTIES
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -rdc=true -arch=sm_52")
 set(CMAKE_CUDA_ARCHITECTURES 52)
 
-target_compile_options(sql_processor PRIVATE
+target_compile_options(main PRIVATE
     -Wall -Wextra
 )
 
 # Modern CMake: Prefer imported CUDA::cudart target if available, else fallback
 find_package(CUDAToolkit)
 if (CUDAToolkit_FOUND AND TARGET CUDA::cudart)
-    target_link_libraries(sql_processor
+    target_link_libraries(main
         CUDA::cudart
         sqlparser
         duckdb
 
     )
 else()
-    target_link_libraries(sql_processor
+    target_link_libraries(main
         cudart
         sqlparser
         duckdb

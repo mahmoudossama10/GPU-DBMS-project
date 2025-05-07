@@ -635,7 +635,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
                         file_name = table_name; // fallback to full name if "batch" not found
                     }
 
-                    std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('../../data/input/" + file_name + ".csv');";
+                    std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('" + storage_->inputDirectory + file_name + ".csv');";
                     con.Query(create_query);
                     loaded_tables.push_back(table_name);
                 }
@@ -661,7 +661,8 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
                 file_name = table_name; // fallback to full name if "batch" not found
             }
 
-            std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('../../data/input/" + file_name + ".csv');";
+            std::string create_query = "CREATE TABLE " + table_name + " AS SELECT * FROM read_csv_auto('" + storage_->inputDirectory + file_name + ".csv');";
+
             con.Query(create_query);
             loaded_tables.push_back(table_name);
         }
@@ -807,7 +808,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
 std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(const hsql::SelectStatement *stmt,
                                                                              std::unique_ptr<duckdb::LogicalOperator> duckdb_plan, int cnt)
 {
-    std::cout << duckdb_plan->ToString() << std::endl;
+    // std::cout << duckdb_plan->ToString() << std::endl;
 
     // Base case for recursion
     if (!duckdb_plan)
