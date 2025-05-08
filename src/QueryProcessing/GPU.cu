@@ -1032,26 +1032,26 @@ void GPUManager::evaluateConditionOnBatch(
             int leftBatchSize = leftTable->getSize();
             int rightBatchSize = rightTable->getSize();
 
-
             // Get integer column data directly from the Table class
             // (using the cached int columns from the Table implementation)
             std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
             size_t n = leftColumnDataUnion.size();
-            int64_t* leftColumnData = new int64_t[n];
+            int64_t *leftColumnData = new int64_t[n];
 
-            for (size_t i = 0; i < n; ++i) {
-                const unionV& val = leftColumnDataUnion[i];
-                leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            for (size_t i = 0; i < n; ++i)
+            {
+                const unionV &val = leftColumnDataUnion[i];
+                leftColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
             }
-
 
             std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
             n = rightColumnDataUnion.size();
-            int64_t* rightColumnData = new int64_t[n];
+            int64_t *rightColumnData = new int64_t[n];
 
-            for (size_t i = 0; i < n; ++i) {
-                const unionV& val = rightColumnDataUnion[i];
-                    rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            for (size_t i = 0; i < n; ++i)
+            {
+                const unionV &val = rightColumnDataUnion[i];
+                rightColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
             }
 
             // Stream for asynchronous operations
@@ -1126,21 +1126,22 @@ void GPUManager::evaluateConditionOnBatch(
             // Get double column data directly from the Table class
             std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
             size_t n = leftColumnDataUnion.size();
-            int64_t* leftColumnData = new int64_t[n];
+            int64_t *leftColumnData = new int64_t[n];
 
-            for (size_t i = 0; i < n; ++i) {
-                const unionV& val = leftColumnDataUnion[i];
-                leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            for (size_t i = 0; i < n; ++i)
+            {
+                const unionV &val = leftColumnDataUnion[i];
+                leftColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
             }
-
 
             std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
             n = rightColumnDataUnion.size();
-            int64_t* rightColumnData = new int64_t[n];
+            int64_t *rightColumnData = new int64_t[n];
 
-            for (size_t i = 0; i < n; ++i) {
-                const unionV& val = rightColumnDataUnion[i];
-                    rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            for (size_t i = 0; i < n; ++i)
+            {
+                const unionV &val = rightColumnDataUnion[i];
+                rightColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
             }
 
             // Stream for asynchronous operations
@@ -1813,24 +1814,24 @@ void GPUManager::evaluateTwoTableJoinCondition(
         // const auto &leftColumnData = leftTable->getData().at(leftColName);
         // const auto &rightColumnData = rightTable->getData().at(rightColName);
 
-
         std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
         size_t n = leftColumnDataUnion.size();
-        int64_t* leftColumnData = new int64_t[n];
+        int64_t *leftColumnData = new int64_t[n];
 
-        for (size_t i = 0; i < n; ++i) {
-            const unionV& val = leftColumnDataUnion[i];
-            leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+        for (size_t i = 0; i < n; ++i)
+        {
+            const unionV &val = leftColumnDataUnion[i];
+            leftColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
         }
-
 
         std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
         n = rightColumnDataUnion.size();
-        int64_t* rightColumnData = new int64_t[n];
+        int64_t *rightColumnData = new int64_t[n];
 
-        for (size_t i = 0; i < n; ++i) {
-            const unionV& val = rightColumnDataUnion[i];
-                rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+        for (size_t i = 0; i < n; ++i)
+        {
+            const unionV &val = rightColumnDataUnion[i];
+            rightColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
         }
 
         // Verify column types are integers (current implementation only handles integers)
@@ -3329,4 +3330,744 @@ std::vector<GPUManager::AggregateOp> GPUManager::parseAggregates(
         }
     }
     return aggregates;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////                    ///////////////////////////////////
+///////////////////////////////       FILTER       ///////////////////////////////////
+///////////////////////////////                    ///////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+
+// Kernel for processing integer columns
+__global__ void evaluateIntFilterKernel(
+    const int64_t *__restrict__ leftColumnData,
+    const int64_t *__restrict__ rightColumnData,
+    const char *__restrict__ leftNulls,
+    const char *__restrict__ rightNulls,
+    const GPUManager::FilterCondition *__restrict__ conditions,
+    int numConditions,
+    int numRows,
+    int64_t *__restrict__ results,
+    bool isAnd)
+{
+    const int elementsPerThread = 4;
+    const int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+    for (int i = 0; i < elementsPerThread; i++)
+    {
+        int rowIdx = threadId * elementsPerThread + i;
+        if (rowIdx >= numRows)
+            return;
+
+        bool result = isAnd;
+        for (int c = 0; c < numConditions; c++)
+        {
+            const GPUManager::FilterCondition &condition = conditions[c];
+            bool match = false;
+
+            if (leftNulls[rowIdx] != 0 || (!condition.is_literal && rightNulls[rowIdx] != 0))
+            {
+                match = false; // Null values don't match
+            }
+            else
+            {
+                int64_t leftValue = leftColumnData[rowIdx];
+                int64_t rightValue;
+
+                if (condition.is_literal)
+                {
+                    rightValue = condition.literal_value.i->value;
+                }
+                else
+                {
+                    rightValue = rightColumnData[rowIdx];
+                }
+
+                switch (condition.op)
+                {
+                case hsql::kOpEquals:
+                    match = (leftValue == rightValue);
+                    break;
+                case hsql::kOpNotEquals:
+                    match = (leftValue != rightValue);
+                    break;
+                case hsql::kOpLess:
+                    match = (leftValue < rightValue);
+                    break;
+                case hsql::kOpGreater:
+                    match = (leftValue > rightValue);
+                    break;
+                case hsql::kOpLessEq:
+                    match = (leftValue <= rightValue);
+                    break;
+                case hsql::kOpGreaterEq:
+                    match = (leftValue >= rightValue);
+                    break;
+                default:
+                    match = false;
+                }
+            }
+
+            if (isAnd)
+            {
+                result = result && match;
+                if (!result)
+                    break;
+            }
+            else
+            {
+                result = result || match;
+                if (result)
+                    break;
+            }
+        }
+
+        results[rowIdx] = result ? 1 : 0;
+    }
+}
+
+// Kernel for processing double columns
+__global__ void evaluateDoubleFilterKernel(
+    const double *__restrict__ leftColumnData,
+    const double *__restrict__ rightColumnData,
+    const char *__restrict__ leftNulls,
+    const char *__restrict__ rightNulls,
+    const GPUManager::FilterCondition *__restrict__ conditions,
+    int numConditions,
+    int numRows,
+    int64_t *__restrict__ results,
+    bool isAnd)
+{
+    const int elementsPerThread = 4;
+    const int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+    for (int i = 0; i < elementsPerThread; i++)
+    {
+        int rowIdx = threadId * elementsPerThread + i;
+        if (rowIdx >= numRows)
+            return;
+
+        bool result = isAnd;
+        for (int c = 0; c < numConditions; c++)
+        {
+            const GPUManager::FilterCondition &condition = conditions[c];
+            bool match = false;
+
+            if (leftNulls[rowIdx] != 0 || (!condition.is_literal && rightNulls[rowIdx] != 0))
+            {
+                match = false;
+            }
+            else
+            {
+                double leftValue = leftColumnData[rowIdx];
+                double rightValue;
+
+                if (condition.is_literal)
+                {
+                    rightValue = condition.literal_value.d->value;
+                }
+                else
+                {
+                    rightValue = rightColumnData[rowIdx];
+                }
+
+                switch (condition.op)
+                {
+                case hsql::kOpEquals:
+                    match = (leftValue == rightValue);
+                    break;
+                case hsql::kOpNotEquals:
+                    match = (leftValue != rightValue);
+                    break;
+                case hsql::kOpLess:
+                    match = (leftValue < rightValue);
+                    break;
+                case hsql::kOpGreater:
+                    match = (leftValue > rightValue);
+                    break;
+                case hsql::kOpLessEq:
+                    match = (leftValue <= rightValue);
+                    break;
+                case hsql::kOpGreaterEq:
+                    match = (leftValue >= rightValue);
+                    break;
+                default:
+                    match = false;
+                }
+            }
+
+            if (isAnd)
+            {
+                result = result && match;
+                if (!result)
+                    break;
+            }
+            else
+            {
+                result = result || match;
+                if (result)
+                    break;
+            }
+        }
+
+        results[rowIdx] = result ? 1 : 0;
+    }
+}
+
+// Kernel for processing string columns
+__global__ void evaluateStringFilterKernel(
+    const char *__restrict__ stringData,
+    const int *__restrict__ stringOffsets,
+    const char *__restrict__ literalStrings,
+    const int *__restrict__ literalOffsets,
+    const char *__restrict__ leftNulls,
+    const GPUManager::FilterCondition *__restrict__ conditions,
+    int numConditions,
+    int numRows,
+    int64_t *__restrict__ results,
+    bool isAnd)
+{
+    const int elementsPerThread = 2;
+    const int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+    for (int i = 0; i < elementsPerThread; i++)
+    {
+        int rowIdx = threadId * elementsPerThread + i;
+        if (rowIdx >= numRows)
+            return;
+
+        bool result = isAnd;
+        for (int c = 0; c < numConditions; c++)
+        {
+            const GPUManager::FilterCondition &condition = conditions[c];
+            bool match = false;
+
+            if (leftNulls[rowIdx] != 0 || !condition.is_literal)
+            {
+                match = false; // Only support literal comparisons for strings
+            }
+            else
+            {
+                const char *leftStr = stringData + stringOffsets[rowIdx];
+                const char *rightStr = literalStrings + literalOffsets[c];
+                int cmpResult = 0;
+                while (*leftStr && *rightStr && *leftStr == *rightStr)
+                {
+                    ++leftStr;
+                    ++rightStr;
+                }
+                cmpResult = *leftStr - *rightStr;
+
+                switch (condition.op)
+                {
+                case hsql::kOpEquals:
+                    match = (cmpResult == 0);
+                    break;
+                case hsql::kOpNotEquals:
+                    match = (cmpResult != 0);
+                    break;
+                case hsql::kOpLess:
+                    match = (cmpResult < 0);
+                    break;
+                case hsql::kOpGreater:
+                    match = (cmpResult > 0);
+                    break;
+                case hsql::kOpLessEq:
+                    match = (cmpResult <= 0);
+                    break;
+                case hsql::kOpGreaterEq:
+                    match = (cmpResult >= 0);
+                    break;
+                default:
+                    match = false;
+                }
+            }
+
+            if (isAnd)
+            {
+                result = result && match;
+                if (!result)
+                    break;
+            }
+            else
+            {
+                result = result || match;
+                if (result)
+                    break;
+            }
+        }
+
+        results[rowIdx] = result ? 1 : 0;
+    }
+}
+
+// Main filter implementation
+std::shared_ptr<Table> GPUManager::executeFilter(
+    std::shared_ptr<Table> table,
+    const hsql::Expr *where_clause)
+{
+    if (!table || !where_clause || !hasGPU_)
+    {
+        throw std::runtime_error("Invalid input or GPU not available for filtering");
+    }
+
+    const size_t numRows = table->getSize();
+    if (numRows == 0)
+    {
+        return table;
+    }
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    // Parse filter conditions
+    std::vector<FilterCondition> conditions;
+    if (!parseFilterConditions(table, where_clause, conditions))
+    {
+        throw std::runtime_error("Failed to parse filter conditions");
+    }
+
+    if (conditions.empty())
+    {
+        // Clean up any allocated literal values
+        for (auto &condition : conditions)
+        {
+            if (condition.is_literal)
+            {
+                switch (condition.col_type)
+                {
+                case ColumnType::STRING:
+                    delete condition.literal_value.s;
+                    break;
+                case ColumnType::INTEGER:
+                    delete condition.literal_value.i;
+                    break;
+                case ColumnType::DOUBLE:
+                    delete condition.literal_value.d;
+                    break;
+                case ColumnType::DATETIME:
+                    delete condition.literal_value.t;
+                    break;
+                }
+            }
+        }
+        return table;
+    }
+
+    // Allocate device memory for results
+    int64_t *d_results = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_results, numRows * sizeof(int64_t)));
+
+    bool isAnd = true;
+    if (where_clause->type == hsql::kExprOperator &&
+        (where_clause->opType == hsql::kOpAnd || where_clause->opType == hsql::kOpOr))
+    {
+        isAnd = (where_clause->opType == hsql::kOpAnd);
+    }
+
+    CUDA_CHECK(cudaMemset(d_results, isAnd ? 1 : 0, numRows * sizeof(int64_t)));
+
+    // Cache table headers and data to avoid repeated calls
+    const auto &headers = table->getHeaders();
+    const auto &tableData = table->getData();
+
+    // Group conditions by column
+    std::unordered_map<std::string, std::vector<FilterCondition>> conditionsByColumn;
+    for (const auto &condition : conditions)
+    {
+        const std::string &colName = headers[condition.left_col_idx];
+        conditionsByColumn[colName].push_back(condition);
+    }
+
+    // Process each column
+    for (const auto &[colName, colConditions] : conditionsByColumn)
+    {
+        ColumnType colType = table->getColumnType(colName);
+        cudaStream_t stream;
+        CUDA_CHECK(cudaStreamCreate(&stream));
+
+        // Copy conditions to device
+        FilterCondition *d_conditions = nullptr;
+        CUDA_CHECK(cudaMalloc(&d_conditions, colConditions.size() * sizeof(FilterCondition)));
+        CUDA_CHECK(cudaMemcpyAsync(d_conditions, colConditions.data(),
+                                   colConditions.size() * sizeof(FilterCondition),
+                                   cudaMemcpyHostToDevice, stream));
+
+        // Handle string literals for STRING columns
+        std::vector<char> literalStringData;
+        std::vector<int> literalOffsets;
+        char *d_literalStrings = nullptr;
+        int *d_literalOffsets = nullptr;
+        if (colType == ColumnType::STRING)
+        {
+            int totalStringSize = 0;
+            literalOffsets.push_back(0);
+            for (const auto &condition : colConditions)
+            {
+                if (condition.is_literal)
+                {
+                    const std::string &str = *condition.literal_value.s;
+                    literalStringData.insert(literalStringData.end(), str.begin(), str.end());
+                    literalStringData.push_back('\0');
+                    totalStringSize += str.length() + 1;
+                    literalOffsets.push_back(totalStringSize);
+                }
+            }
+            if (!literalStringData.empty())
+            {
+                CUDA_CHECK(cudaMalloc(&d_literalStrings, totalStringSize * sizeof(char)));
+                CUDA_CHECK(cudaMalloc(&d_literalOffsets, literalOffsets.size() * sizeof(int)));
+                CUDA_CHECK(cudaMemcpyAsync(d_literalStrings, literalStringData.data(),
+                                           totalStringSize * sizeof(char),
+                                           cudaMemcpyHostToDevice, stream));
+                CUDA_CHECK(cudaMemcpyAsync(d_literalOffsets, literalOffsets.data(),
+                                           literalOffsets.size() * sizeof(int),
+                                           cudaMemcpyHostToDevice, stream));
+            }
+        }
+
+        switch (colType)
+        {
+        case ColumnType::INTEGER:
+        {
+            const auto &columnData = tableData.at(colName);
+            std::vector<int64_t> intData(numRows);
+            std::vector<char> nullData(numRows);
+            for (size_t i = 0; i < numRows; i++)
+            {
+                intData[i] = columnData[i].i->value;
+                nullData[i] = columnData[i].i->is_null ? 1 : 0;
+            }
+
+            int64_t *d_column = nullptr;
+            char *d_nulls = nullptr;
+            CUDA_CHECK(cudaMalloc(&d_column, numRows * sizeof(int64_t)));
+            CUDA_CHECK(cudaMalloc(&d_nulls, numRows * sizeof(char)));
+            CUDA_CHECK(cudaMemcpyAsync(d_column, intData.data(),
+                                       numRows * sizeof(int64_t),
+                                       cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_nulls, nullData.data(),
+                                       numRows * sizeof(char),
+                                       cudaMemcpyHostToDevice, stream));
+
+            int64_t *d_rightColumn = nullptr;
+            char *d_rightNulls = nullptr;
+            if (!colConditions[0].is_literal)
+            {
+                const auto &rightColumnData = tableData.at(headers[colConditions[0].right_col_idx]);
+                std::vector<int64_t> rightIntData(numRows);
+                std::vector<char> rightNullData(numRows);
+                for (size_t i = 0; i < numRows; i++)
+                {
+                    rightIntData[i] = rightColumnData[i].i->value;
+                    rightNullData[i] = rightColumnData[i].i->is_null ? 1 : 0;
+                }
+                CUDA_CHECK(cudaMalloc(&d_rightColumn, numRows * sizeof(int64_t)));
+                CUDA_CHECK(cudaMalloc(&d_rightNulls, numRows * sizeof(char)));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightColumn, rightIntData.data(),
+                                           numRows * sizeof(int64_t),
+                                           cudaMemcpyHostToDevice, stream));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightNulls, rightNullData.data(),
+                                           numRows * sizeof(char),
+                                           cudaMemcpyHostToDevice, stream));
+            }
+
+            const int blockSize = 256;
+            const int elementsPerThread = 4;
+            const int effectiveThreads = (numRows + elementsPerThread - 1) / elementsPerThread;
+            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
+
+            evaluateIntFilterKernel<<<gridSize, blockSize, 0, stream>>>(
+                d_column, d_rightColumn, d_nulls, d_rightNulls,
+                d_conditions, colConditions.size(), numRows, d_results, isAnd);
+
+            CUDA_CHECK(cudaFree(d_column));
+            CUDA_CHECK(cudaFree(d_nulls));
+            if (d_rightColumn)
+                CUDA_CHECK(cudaFree(d_rightColumn));
+            if (d_rightNulls)
+                CUDA_CHECK(cudaFree(d_rightNulls));
+            break;
+        }
+        case ColumnType::DOUBLE:
+        {
+            const auto &columnData = tableData.at(colName);
+            std::vector<double> doubleData(numRows);
+            std::vector<char> nullData(numRows);
+            for (size_t i = 0; i < numRows; i++)
+            {
+                doubleData[i] = columnData[i].d->value;
+                nullData[i] = columnData[i].d->is_null ? 1 : 0;
+            }
+
+            double *d_column = nullptr;
+            char *d_nulls = nullptr;
+            CUDA_CHECK(cudaMalloc(&d_column, numRows * sizeof(double)));
+            CUDA_CHECK(cudaMalloc(&d_nulls, numRows * sizeof(char)));
+            CUDA_CHECK(cudaMemcpyAsync(d_column, doubleData.data(),
+                                       numRows * sizeof(double),
+                                       cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_nulls, nullData.data(),
+                                       numRows * sizeof(char),
+                                       cudaMemcpyHostToDevice, stream));
+
+            double *d_rightColumn = nullptr;
+            char *d_rightNulls = nullptr;
+            if (!colConditions[0].is_literal)
+            {
+                const auto &rightColumnData = tableData.at(headers[colConditions[0].right_col_idx]);
+                std::vector<double> rightDoubleData(numRows);
+                std::vector<char> rightNullData(numRows);
+                for (size_t i = 0; i < numRows; i++)
+                {
+                    rightDoubleData[i] = rightColumnData[i].d->value;
+                    rightNullData[i] = rightColumnData[i].d->is_null ? 1 : 0;
+                }
+                CUDA_CHECK(cudaMalloc(&d_rightColumn, numRows * sizeof(double)));
+                CUDA_CHECK(cudaMalloc(&d_rightNulls, numRows * sizeof(char)));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightColumn, rightDoubleData.data(),
+                                           numRows * sizeof(double),
+                                           cudaMemcpyHostToDevice, stream));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightNulls, rightNullData.data(),
+                                           numRows * sizeof(char),
+                                           cudaMemcpyHostToDevice, stream));
+            }
+
+            const int blockSize = 256;
+            const int elementsPerThread = 4;
+            const int effectiveThreads = (numRows + elementsPerThread - 1) / elementsPerThread;
+            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
+
+            evaluateDoubleFilterKernel<<<gridSize, blockSize, 0, stream>>>(
+                d_column, d_rightColumn, d_nulls, d_rightNulls,
+                d_conditions, colConditions.size(), numRows, d_results, isAnd);
+
+            CUDA_CHECK(cudaFree(d_column));
+            CUDA_CHECK(cudaFree(d_nulls));
+            if (d_rightColumn)
+                CUDA_CHECK(cudaFree(d_rightColumn));
+            if (d_rightNulls)
+                CUDA_CHECK(cudaFree(d_rightNulls));
+            break;
+        }
+        case ColumnType::STRING:
+        {
+            const auto &columnData = tableData.at(colName);
+            std::vector<int> stringOffsets(numRows);
+            std::vector<char> nullData(numRows);
+            int totalStringSize = 0;
+            for (size_t i = 0; i < numRows; i++)
+            {
+                stringOffsets[i] = totalStringSize;
+                nullData[i] = columnData[i].s->empty() ? 1 : 0;
+                totalStringSize += columnData[i].s->length() + 1;
+            }
+
+            std::vector<char> stringData(totalStringSize);
+            for (size_t i = 0; i < numRows; i++)
+            {
+                const std::string &str = *columnData[i].s;
+                std::memcpy(&stringData[stringOffsets[i]], str.c_str(), str.length() + 1);
+            }
+
+            char *d_stringData = nullptr;
+            int *d_stringOffsets = nullptr;
+            char *d_nulls = nullptr;
+            CUDA_CHECK(cudaMalloc(&d_stringData, totalStringSize * sizeof(char)));
+            CUDA_CHECK(cudaMalloc(&d_stringOffsets, numRows * sizeof(int)));
+            CUDA_CHECK(cudaMalloc(&d_nulls, numRows * sizeof(char)));
+            CUDA_CHECK(cudaMemcpyAsync(d_stringData, stringData.data(),
+                                       totalStringSize * sizeof(char),
+                                       cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_stringOffsets, stringOffsets.data(),
+                                       numRows * sizeof(int),
+                                       cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_nulls, nullData.data(),
+                                       numRows * sizeof(char),
+                                       cudaMemcpyHostToDevice, stream));
+
+            const int blockSize = 256;
+            const int elementsPerThread = 2;
+            const int effectiveThreads = (numRows + elementsPerThread - 1) / elementsPerThread;
+            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
+
+            evaluateStringFilterKernel<<<gridSize, blockSize, 0, stream>>>(
+                d_stringData, d_stringOffsets, d_literalStrings, d_literalOffsets,
+                d_nulls, d_conditions, colConditions.size(), numRows, d_results, isAnd);
+
+            CUDA_CHECK(cudaFree(d_stringData));
+            CUDA_CHECK(cudaFree(d_stringOffsets));
+            CUDA_CHECK(cudaFree(d_nulls));
+            if (d_literalStrings)
+                CUDA_CHECK(cudaFree(d_literalStrings));
+            if (d_literalOffsets)
+                CUDA_CHECK(cudaFree(d_literalOffsets));
+            break;
+        }
+        case ColumnType::DATETIME:
+        {
+            throw std::runtime_error("DATETIME filtering not implemented");
+        }
+        default:
+            throw std::runtime_error("Unsupported column type for GPU filtering");
+        }
+
+        CUDA_CHECK(cudaFree(d_conditions));
+        CUDA_CHECK(cudaStreamSynchronize(stream));
+        CUDA_CHECK(cudaStreamDestroy(stream));
+    }
+
+    // Copy results back to host
+    std::vector<int64_t> hostResults(numRows);
+    CUDA_CHECK(cudaMemcpy(hostResults.data(), d_results, numRows * sizeof(int64_t), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(d_results));
+
+    // Create filtered table
+    auto resultTable = std::make_shared<Table>("filtered_" + table->getName(), table->getHeaders(), std::unordered_map<std::string, std::vector<unionV>>(), table->getColumnTypes());
+    for (const auto &colName : headers)
+    {
+        resultTable->addColumn(colName, std::vector<unionV>(), table->getColumnType(colName));
+    }
+
+    // Copy passing rows
+    for (size_t i = 0; i < numRows; i++)
+    {
+        if (hostResults[i])
+        {
+            std::vector<unionV> row = table->getRow(i);
+            resultTable->addRow(row);
+        }
+    }
+
+    // Clean up conditions
+    for (auto &condition : conditions)
+    {
+        if (condition.is_literal)
+        {
+            switch (condition.col_type)
+            {
+            case ColumnType::STRING:
+                delete condition.literal_value.s;
+                break;
+            case ColumnType::INTEGER:
+                delete condition.literal_value.i;
+                break;
+            case ColumnType::DOUBLE:
+                delete condition.literal_value.d;
+                break;
+            case ColumnType::DATETIME:
+                delete condition.literal_value.t;
+                break;
+            }
+        }
+    }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> executionTime = endTime - startTime;
+    std::cout << "GPU Filter execution time: " << executionTime.count() << " ms" << std::endl;
+    std::cout << "Filtered from " << numRows << " to " << resultTable->getSize() << " rows" << std::endl;
+
+    return resultTable;
+}
+
+// Parse filter conditions
+bool GPUManager::parseFilterConditions(
+    const std::shared_ptr<Table> &table,
+    const hsql::Expr *expr,
+    std::vector<FilterCondition> &conditions)
+{
+    if (!expr)
+        return true;
+
+    switch (expr->type)
+    {
+    case hsql::kExprOperator:
+        if (expr->opType == hsql::kOpAnd || expr->opType == hsql::kOpOr)
+        {
+            return parseFilterConditions(table, expr->expr, conditions) &&
+                   parseFilterConditions(table, expr->expr2, conditions);
+        }
+
+        if (isComparisonOperator(expr->opType))
+        {
+            FilterCondition condition;
+            condition.op = expr->opType;
+
+            if (expr->expr->type != hsql::kExprColumnRef)
+            {
+                return false;
+            }
+
+            std::string colName = expr->expr->name;
+            const auto &columnNames = table->getHeaders();
+            auto it = std::find(columnNames.begin(), columnNames.end(), colName);
+            if (it == columnNames.end())
+            {
+                return false;
+            }
+
+            condition.left_col_idx = std::distance(columnNames.begin(), it);
+            condition.col_type = table->getColumnType(colName);
+
+            if (expr->expr2->type == hsql::kExprColumnRef)
+            {
+                condition.is_literal = false;
+                std::string rightColName = expr->expr2->name;
+                auto rightIt = std::find(columnNames.begin(), columnNames.end(), rightColName);
+                if (rightIt == columnNames.end() || table->getColumnType(rightColName) != condition.col_type)
+                {
+                    return false;
+                }
+                condition.right_col_idx = std::distance(columnNames.begin(), rightIt);
+            }
+            else
+            {
+                condition.is_literal = true;
+                switch (expr->expr2->type)
+                {
+                case hsql::kExprLiteralInt:
+                    if (condition.col_type != ColumnType::INTEGER)
+                        return false;
+                    condition.literal_value.i = new TheInteger{expr->expr2->ival, false};
+                    break;
+                case hsql::kExprLiteralFloat:
+                    if (condition.col_type != ColumnType::DOUBLE)
+                        return false;
+                    condition.literal_value.d = new TheDouble{expr->expr2->fval, false};
+                    break;
+                case hsql::kExprLiteralString:
+                    if (condition.col_type != ColumnType::STRING)
+                        return false;
+                    condition.literal_value.s = new std::string(expr->expr2->name);
+                    break;
+                default:
+                    return false;
+                }
+            }
+
+            conditions.push_back(condition);
+            return true;
+        }
+        return false;
+
+    default:
+        return false;
+    }
+}
+
+bool GPUManager::isComparisonOperator(hsql::OperatorType op)
+{
+    return op == hsql::kOpEquals ||
+           op == hsql::kOpNotEquals ||
+           op == hsql::kOpLess ||
+           op == hsql::kOpLessEq ||
+           op == hsql::kOpGreater ||
+           op == hsql::kOpGreaterEq;
 }

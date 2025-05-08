@@ -58,15 +58,17 @@ public:
         const std::vector<std::shared_ptr<Table>> &tables,
         const hsql::Expr *joinConditions);
 
+    std::shared_ptr<Table> executeFilter(
+        std::shared_ptr<Table> table,
+        const hsql::Expr *where_clause);
+
     std::shared_ptr<Table> executeOrderBy(
         std::shared_ptr<Table> table,
         const std::vector<hsql::OrderDescription *> &order_exprs_);
 
-
-        std::shared_ptr<Table> executeAggregate(
-            std::shared_ptr<Table> table,
-            const std::vector<hsql::Expr *> &select_list_);
-
+    std::shared_ptr<Table> executeAggregate(
+        std::shared_ptr<Table> table,
+        const std::vector<hsql::Expr *> &select_list_);
 
     struct SortColumn
     {
@@ -75,7 +77,8 @@ public:
         ColumnType type;
     };
 
-    struct AggregateOp {
+    struct AggregateOp
+    {
         std::string function_name;
         std::string column_name;
         std::string alias;
@@ -83,17 +86,24 @@ public:
         size_t column_index;
     };
 
+    struct FilterCondition
+    {
+        size_t left_col_idx;
+        size_t right_col_idx;
+        bool is_literal;
+        unionV literal_value;
+        hsql::OperatorType op;
+        ColumnType col_type;
+    };
+
     std::shared_ptr<Table> output_join_table;
     int joinPlansCount = 0;
 
 private:
-    // Flag indicating if GPU is available
     bool hasGPU_;
 
-    // Helper method to find column index
     int findColumnIndex(const Table &table, const char *columnName, const char *tableName);
 
-    // Process batches recursively
     void processBatchesRecursive(
         const std::vector<std::shared_ptr<Table>> &tables,
         std::vector<std::vector<int>> &batchIndices,
@@ -101,30 +111,30 @@ private:
         std::vector<std::vector<unionV>> &resultData,
         int tableIndex);
 
-    // Process a specific batch
     void processBatch(
         const std::vector<std::shared_ptr<Table>> &tables,
         const hsql::Expr *conditions, int direction);
 
-    // Evaluate condition on batch
     void evaluateConditionOnBatch(
         const std::vector<std::shared_ptr<Table>> &tables,
         const hsql::Expr *condition, int direction);
 
-    // Combine headers from multiple tables
     std::vector<std::string> combineMultipleHeaders(
         const std::vector<std::shared_ptr<Table>> &tables);
 
-    // Merge rows based on selected indices
     std::vector<std::vector<unionV>> mergeBatchResults(
         const std::vector<std::shared_ptr<Table>> &tables,
         const std::vector<std::vector<int>> &selectedIndices);
 
     std::vector<SortColumn> parseOrderBy(const Table &table, const std::vector<hsql::OrderDescription *> &order_exprs_);
-    std::vector<AggregateOp> parseAggregates(const std::vector<hsql::Expr*>& select_list, const Table& table);
-    std::shared_ptr<Table> aggregateTableGPU(const Table& table, const std::vector<AggregateOp>& aggregates);
-    std::string unionValueToString(const unionV& value, ColumnType type);
+    std::vector<AggregateOp> parseAggregates(const std::vector<hsql::Expr *> &select_list, const Table &table);
+    std::shared_ptr<Table> aggregateTableGPU(const Table &table, const std::vector<AggregateOp> &aggregates);
+    std::string unionValueToString(const unionV &value, ColumnType type);
 
+    bool parseFilterConditions(
+        const std::shared_ptr<Table> &table,
+        const hsql::Expr *expr,
+        std::vector<FilterCondition> &conditions);
 
-
+    bool isComparisonOperator(hsql::OperatorType op);
 };
