@@ -740,10 +740,14 @@ void QueryExecutor::generateBatchCombinationsRecursive(
     const std::string &originalTable = currentGroup->first;
     const std::vector<std::string> &batches = currentGroup->second;
 
+    // Ensure deterministic order
+    std::vector<std::string> sortedBatches = batches;
+    std::sort(sortedBatches.begin(), sortedBatches.end());
+
     auto nextGroup = currentGroup;
     ++nextGroup;
 
-    for (const auto &batch : batches)
+    for (const auto &batch : sortedBatches)
     {
         // Add this batch to the current combination
         std::map<std::string, std::string> newCombination = currentCombination;
@@ -753,6 +757,7 @@ void QueryExecutor::generateBatchCombinationsRecursive(
         generateBatchCombinationsRecursive(tableGroups, newCombination, nextGroup, result);
     }
 }
+
 std::string QueryExecutor::replaceTableNameInQuery(const std::string &query,
                                                    const std::string &oldName,
                                                    const std::string &newName,

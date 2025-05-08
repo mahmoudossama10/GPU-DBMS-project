@@ -348,9 +348,9 @@ void CommandLineInterface::handleTestCommand()
         // {15, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
         // JOIN
         {16, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id = d.id"},
-        // {17, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.id = d.id AND p.salary >= 40000"},
+        {17, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.id = d.id AND p.salary >= 40000"},
         // MULTIPLE TABLES
-        // {18, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id = d.id AND m.id = 1"},
+        {18, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id = d.id AND m.id = 1"},
         // AGGREGATION
         // {19, "SELECT COUNT(*) AS total_people FROM people"},
         // {20, "SELECT AVG(salary) AS avg_salary FROM people"},
