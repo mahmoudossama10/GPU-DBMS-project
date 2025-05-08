@@ -9,7 +9,7 @@ class JoinPlan : public ExecutionPlan
 {
 public:
     JoinPlan(std::vector<std::unique_ptr<ExecutionPlan>> inputs,
-        std::string where)
+             std::string where)
         : inputs_(std::move(inputs)), whereString(where) {}
 
     std::shared_ptr<Table> execute() override;

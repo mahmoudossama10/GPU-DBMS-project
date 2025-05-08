@@ -190,10 +190,14 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// int main(){
+// int main()
+// {
 //     try
 //     {
 //         CommandLineInterface cli;
+
+//         std::string inputDirectory = "../../data/input/";
+//         cli.storageManager->inputDirectory = inputDirectory;
 //         cli.run();
 //     }
 //     catch (const std::exception &e)

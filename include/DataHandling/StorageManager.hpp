@@ -16,5 +16,4 @@ public:
 
     std::unordered_map<std::string, std::unique_ptr<Table>> tables;
     std::string inputDirectory;
-
 };

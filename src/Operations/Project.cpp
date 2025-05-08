@@ -92,7 +92,14 @@ std::vector<std::string> ProjectPlan::getColumnNames() const
         }
         else if (expr->type == hsql::kExprColumnRef)
         {
-            names.push_back(expr->name);
+            if (expr->table)
+            {
+                names.push_back(std::string(expr->table) + "." + expr->name);
+            }
+            else
+            {
+                names.push_back(expr->name);
+            }
         }
         else
         {
@@ -101,7 +108,6 @@ std::vector<std::string> ProjectPlan::getColumnNames() const
     }
     return names;
 }
-
 std::string ProjectPlan::getColumnNameFromExpr(const hsql::Expr *expr) const
 {
     if (expr->type == hsql::kExprColumnRef)

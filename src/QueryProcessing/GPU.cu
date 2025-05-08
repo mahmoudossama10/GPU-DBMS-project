@@ -182,7 +182,7 @@ __global__ void add_aux(int64_t* input, int n, const int64_t* aux) {
 
 
 
-std::vector<int64_t> iterator(int64_t* cpu_out, int size ) {
+std::vector<int64_t> run_bs(int64_t* cpu_out, int size ) {
     std::vector<int64_t> result;
 
     int64_t prev = 0;
@@ -659,7 +659,7 @@ std::shared_ptr<Table> GPUManager::executeMultipleTableJoin(
     cudaMemcpy(h_result, d_result, totalBatchSize * sizeof(int64_t), cudaMemcpyDeviceToHost);
 
 
-    std::vector<int64_t> match_indecies = iterator(h_result, totalBatchSize);
+    std::vector<int64_t> match_indecies = run_bs(h_result, totalBatchSize);
 
 
 
@@ -1890,7 +1890,7 @@ std::shared_ptr<Table> GPUManager::executeTwoTableJoinWithBinarySearch(
     cudaMemcpy(h_result, d_result, totalCombinations * sizeof(int64_t), cudaMemcpyDeviceToHost);
 
 
-    std::vector<int64_t> match_indecies = iterator(h_result, totalCombinations);
+    std::vector<int64_t> match_indecies = run_bs(h_result, totalCombinations);
 
 
  
