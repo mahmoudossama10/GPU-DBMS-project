@@ -1,0 +1,7 @@
+Orders_id,CustomerName,TotalAmount,OrderDate,Products_id,Employees_id
+1001,John Doe,150.45,2023-03-15 11:30:00,101,1
+1002,Olivia Harris,275.99,2022-08-02 14:00:00,102,3
+1003,William Johnson,95.75,2021-07-10 9:15:00,103,2
+1004,Sophia Martinez,220,2020-11-21 16:45:00,104,4
+1005,Liam Anderson,299.99,2019-07-14 10:00:00,105,5
+1006,Harry Karl,195,2018-07-14 10:00:00,106,1

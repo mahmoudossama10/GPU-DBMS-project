@@ -1032,26 +1032,26 @@ void GPUManager::evaluateConditionOnBatch(
             int leftBatchSize = leftTable->getSize();
             int rightBatchSize = rightTable->getSize();
 
-
             // Get integer column data directly from the Table class
             // (using the cached int columns from the Table implementation)
             std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
             size_t n = leftColumnDataUnion.size();
-            int64_t* leftColumnData = new int64_t[n];
+            int64_t *leftColumnData = new int64_t[n];
 
-            for (size_t i = 0; i < n; ++i) {
-                const unionV& val = leftColumnDataUnion[i];
-                leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            for (size_t i = 0; i < n; ++i)
+            {
+                const unionV &val = leftColumnDataUnion[i];
+                leftColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
             }
-
 
             std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
             n = rightColumnDataUnion.size();
-            int64_t* rightColumnData = new int64_t[n];
+            int64_t *rightColumnData = new int64_t[n];
 
-            for (size_t i = 0; i < n; ++i) {
-                const unionV& val = rightColumnDataUnion[i];
-                    rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            for (size_t i = 0; i < n; ++i)
+            {
+                const unionV &val = rightColumnDataUnion[i];
+                rightColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
             }
 
             // Stream for asynchronous operations
@@ -1126,21 +1126,22 @@ void GPUManager::evaluateConditionOnBatch(
             // Get double column data directly from the Table class
             std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
             size_t n = leftColumnDataUnion.size();
-            int64_t* leftColumnData = new int64_t[n];
+            int64_t *leftColumnData = new int64_t[n];
 
-            for (size_t i = 0; i < n; ++i) {
-                const unionV& val = leftColumnDataUnion[i];
-                leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            for (size_t i = 0; i < n; ++i)
+            {
+                const unionV &val = leftColumnDataUnion[i];
+                leftColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
             }
-
 
             std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
             n = rightColumnDataUnion.size();
-            int64_t* rightColumnData = new int64_t[n];
+            int64_t *rightColumnData = new int64_t[n];
 
-            for (size_t i = 0; i < n; ++i) {
-                const unionV& val = rightColumnDataUnion[i];
-                    rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            for (size_t i = 0; i < n; ++i)
+            {
+                const unionV &val = rightColumnDataUnion[i];
+                rightColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
             }
 
             // Stream for asynchronous operations
@@ -1813,24 +1814,24 @@ void GPUManager::evaluateTwoTableJoinCondition(
         // const auto &leftColumnData = leftTable->getData().at(leftColName);
         // const auto &rightColumnData = rightTable->getData().at(rightColName);
 
-
         std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
         size_t n = leftColumnDataUnion.size();
-        int64_t* leftColumnData = new int64_t[n];
+        int64_t *leftColumnData = new int64_t[n];
 
-        for (size_t i = 0; i < n; ++i) {
-            const unionV& val = leftColumnDataUnion[i];
-            leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+        for (size_t i = 0; i < n; ++i)
+        {
+            const unionV &val = leftColumnDataUnion[i];
+            leftColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
         }
-
 
         std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
         n = rightColumnDataUnion.size();
-        int64_t* rightColumnData = new int64_t[n];
+        int64_t *rightColumnData = new int64_t[n];
 
-        for (size_t i = 0; i < n; ++i) {
-            const unionV& val = rightColumnDataUnion[i];
-                rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+        for (size_t i = 0; i < n; ++i)
+        {
+            const unionV &val = rightColumnDataUnion[i];
+            rightColumnData[i] = static_cast<int64_t>(val.i->value); // assuming TheInteger has a field `value`
         }
 
         // Verify column types are integers (current implementation only handles integers)
@@ -3301,7 +3302,26 @@ std::vector<GPUManager::AggregateOp> GPUManager::parseAggregates(
                         op.column_name = arg->name;
                         if (!table.hasColumn(op.column_name))
                         {
-                            throw SemanticError("Column not found for aggregate: " + op.column_name);
+                            if (!table.hasColumn(op.column_name))
+                            {
+                                // Try to find a column with a qualified name (e.g., e.salary)
+                                bool found = false;
+                                for (const auto &header : table.getHeaders())
+                                {
+                                    // Check if the header ends with "." + op.column_name
+                                    size_t pos = header.rfind(".");
+                                    if (pos != std::string::npos && header.substr(pos + 1) == op.column_name)
+                                    {
+                                        op.column_name = header;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found)
+                                {
+                                    throw SemanticError("Column not found for aggregate: " + op.column_name);
+                                }
+                            }
                         }
                         op.column_index = table.getColumnIndex(op.column_name);
                     }

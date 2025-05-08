@@ -14,7 +14,7 @@ public:
     CommandLineInterface();
     ~CommandLineInterface();
     void run();
-    void processQuery(const std::string &query);
+    void processQuery(const std::string &query, const std::string outputFileName);
     void handleLoadCommand(const std::vector<std::string> &args);
     void handleShowTablesCommand();
     void displayHelp();

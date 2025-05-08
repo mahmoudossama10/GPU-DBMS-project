@@ -1,0 +1,1 @@
+  -L"/home/aoz/GPU-DBMS-project/sql-parser-main/build"  -L"/home/aoz/GPU-DBMS-project/libs/duckdb/build/release/src"  -Wl,-rpath,/home/aoz/GPU-DBMS-project/sql-parser-main/build:/home/aoz/GPU-DBMS-project/libs/duckdb/build/release/src "/usr/local/cuda-12.8/targets/x86_64-linux/lib/libcudart.so" -lsqlparser -lduckdb -lcudadevrt -lcudart_static -lrt -lpthread -ldl 

@@ -1,0 +1,1 @@
+-I"/home/aoz/GPU-DBMS-project/include" -I"/home/aoz/GPU-DBMS-project/sql-parser-main/src" -I"/home/aoz/GPU-DBMS-project/libs/linenoise-ng-master/include" -I"/home/aoz/GPU-DBMS-project/libs/duckdb/src/include" -I"/home/aoz/GPU-DBMS-project/libs/duckdb/build/release/src" -isystem "/usr/local/cuda-12.8/targets/x86_64-linux/include"

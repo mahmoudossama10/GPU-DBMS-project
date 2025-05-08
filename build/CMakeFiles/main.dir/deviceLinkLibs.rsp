@@ -1,0 +1,1 @@
+  -L"/home/aoz/GPU-DBMS-project/sql-parser-main/build"  -L"/home/aoz/GPU-DBMS-project/libs/duckdb/build/release/src"   -lsqlparser -lduckdb -lcudadevrt -lcudart_static -lrt -lpthread -ldl 

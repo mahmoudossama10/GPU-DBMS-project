@@ -1,0 +1,4 @@
+SELECT p.ProductName, p.Price
+FROM Products p
+WHERE p.ReleaseDate > '2021-01-01 00:00:00'
+ORDER BY p.Price Asc;

@@ -1,15 +1,21 @@
 # GPU DBMS project
 
-for sql-parser
-Compile the library make to create libsqlparser.so
-(Optional, Recommended) Run make install to copy the library to /usr/local/lib/
-Run the tests make test to make sure everything worked
-Include the SQLParser.h from src/ (or from /usr/local/lib/hsql/ if you installed it) and link the library in your project
+To Run the project 
 
-for the main
-g++ main.cpp -o main -I/sql-parser-main/src -L/sql-parser-main/build -lsqlparser
-make 
-make run
-load employees ./data/input/employees.csv 
+```
+cd build/bin
+```
 
-select * from employees
+- Note: put your CSVs in the `/data/input` folder
+
+``` Run Query 1
+./main ../../data/input query1.txt
+```
+
+``` Run Query 2
+./main ../../data/input query2.txt
+```
+
+``` Run Query 3
+./main ../../data/input query3.txt
+```

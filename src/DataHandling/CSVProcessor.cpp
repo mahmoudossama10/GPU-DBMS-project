@@ -59,7 +59,9 @@ std::vector<ColumnType> CSVProcessor::inferTypes(const std::string &row)
 }
 
 CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
+
 {
+
     // Step 1: Read all lines into memory
 
     std::vector<std::string> lines;
@@ -103,11 +105,103 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         return {std::vector<std::string>(), std::unordered_map<std::string, std::vector<unionV>>(), std::unordered_map<std::string, ColumnType>()};
     }
 
-    // Step 2: Parse headers from the first line
+    // Step 2: Parse headers from the first line and clean them (remove annotations)
 
-    std::vector<std::string> headers = parseCSVLine(lines[0]);
+    std::vector<std::string> rawHeaders = parseCSVLine(lines[0]);
 
-    // Step 3: Infer types from the second row (or a small sample for robustness)
+    std::vector<std::string> headers;
+
+    for (size_t i = 0; i < rawHeaders.size(); ++i)
+
+    {
+
+        std::string cleanedHeader = rawHeaders[i];
+
+        // Remove annotations like (N), (P), (T), (D) from the header name
+
+        size_t pos = cleanedHeader.find('(');
+
+        if (pos != std::string::npos)
+
+        {
+
+            cleanedHeader = cleanedHeader.substr(0, pos);
+        }
+
+        // Trim any trailing whitespace
+
+        while (!cleanedHeader.empty() && std::isspace(cleanedHeader.back()))
+
+        {
+
+            cleanedHeader.pop_back();
+        }
+
+        headers.push_back(cleanedHeader);
+    }
+
+    // Step 3: Overwrite the CSV file with cleaned headers to ensure subsequent loads see updated names
+
+    // Write to a temporary file first to avoid data loss
+
+    std::string tempFilepath = filepath + ".tmp";
+
+    std::ofstream tempFile(tempFilepath);
+
+    if (!tempFile.is_open())
+
+    {
+
+        throw std::runtime_error("Unable to create temporary file for writing: " + tempFilepath);
+    }
+
+    // Write the cleaned headers as the first line
+
+    for (size_t i = 0; i < headers.size(); ++i)
+
+    {
+
+        tempFile << headers[i];
+
+        if (i < headers.size() - 1)
+
+            tempFile << ",";
+    }
+
+    tempFile << "\n";
+
+    // Write the rest of the lines (data rows) unchanged
+
+    for (size_t i = 1; i < lines.size(); ++i)
+
+    {
+
+        tempFile << lines[i];
+
+        if (i < lines.size() - 1)
+
+            tempFile << "\n";
+    }
+
+    tempFile.close();
+
+    // Replace the original file with the temporary file
+
+    if (std::remove(filepath.c_str()) != 0)
+
+    {
+
+        throw std::runtime_error("Failed to remove original file: " + filepath);
+    }
+
+    if (std::rename(tempFilepath.c_str(), filepath.c_str()) != 0)
+
+    {
+
+        throw std::runtime_error("Failed to rename temporary file to: " + filepath);
+    }
+
+    // Step 4: Infer types from the second row (or a small sample for robustness)
 
     std::vector<ColumnType> types(headers.size(), ColumnType::STRING);
 
@@ -218,7 +312,7 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         }
     }
 
-    // Step 4: Pre-allocate storage for data (array-like for parallelism)
+    // Step 5: Pre-allocate storage for data (array-like for parallelism)
 
     size_t rowCount = lines.size() > 1 ? lines.size() - 1 : 0;
 
@@ -231,7 +325,7 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         tempData[col].resize(rowCount); // Pre-allocate space for each column
     }
 
-    // Step 5: Parallel processing of rows into pre-allocated vectors
+    // Step 6: Parallel processing of rows into pre-allocated vectors
 
 #pragma omp parallel for schedule(static)
 
@@ -258,7 +352,9 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         {
 
             unionV value = {};
+
             value.i = new TheInteger();
+
             value.d = new TheDouble();
 
             switch (types[col])
@@ -279,6 +375,7 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                 {
 
                     value.i->value = 0; // Default value
+
                     value.i->is_null = true;
                 }
 
@@ -296,7 +393,9 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                 catch (...)
 
                 {
+
                     value.d->value = 0.0; // Default value
+
                     value.d->is_null = true;
                 }
 
@@ -319,7 +418,7 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
         }
     }
 
-    // Step 6: Convert temporary array structure to CSVData format
+    // Step 7: Convert temporary array structure to CSVData format
 
     std::unordered_map<std::string, std::vector<unionV>> columnData;
 

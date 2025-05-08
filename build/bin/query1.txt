@@ -1,0 +1,4 @@
+SELECT AVG(e.Salary) AS AverageSalary
+FROM Employees e, SalesOrders s
+WHERE e.Employees_id = s.Employees_id
+  AND s.TotalAmount > 200;

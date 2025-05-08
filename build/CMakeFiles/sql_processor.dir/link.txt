@@ -1,0 +1,1 @@
+/usr/bin/g++ @CMakeFiles/sql_processor.dir/objects1.rsp CMakeFiles/sql_processor.dir/cmake_device_link.o -o bin/sql_processor @CMakeFiles/sql_processor.dir/linkLibs.rsp -L"/usr/local/cuda-12.8/targets/x86_64-linux/lib/stubs" -L"/usr/local/cuda-12.8/targets/x86_64-linux/lib"

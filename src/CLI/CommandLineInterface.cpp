@@ -98,7 +98,7 @@ void CommandLineInterface::run()
             }
             else
             {
-                processQuery(input);
+                processQuery(input, "query_output");
             }
         }
         catch (const std::exception &e)
@@ -162,7 +162,7 @@ void CommandLineInterface::cleanupBatchTables()
     }
 }
 
-void CommandLineInterface::processQuery(const std::string &query)
+void CommandLineInterface::processQuery(const std::string &query, const std::string outputFileName)
 {
     try
     {
@@ -236,7 +236,7 @@ void CommandLineInterface::processQuery(const std::string &query)
             std::cout << totalRows << " rows returned\n";
 
             // Save full results to CSV
-            std::string outputPath = "../../data/output/query_output.csv";
+            std::string outputPath = "../../data/output/" + outputFileName + ".csv";
             CSVProcessor::saveCSV(outputPath, result->getHeaders(), columnData, columnTypes); // CSVProcessor needs to be updated too
             std::cout << "Saved output to '" << outputPath << "'\n";
 

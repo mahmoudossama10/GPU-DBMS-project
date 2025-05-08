@@ -1,0 +1,3 @@
+/home/aoz/GPU-DBMS-project/build/CMakeFiles/main.dir
+/home/aoz/GPU-DBMS-project/build/CMakeFiles/edit_cache.dir
+/home/aoz/GPU-DBMS-project/build/CMakeFiles/rebuild_cache.dir
