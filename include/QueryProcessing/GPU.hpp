@@ -32,6 +32,18 @@ public:
     // Constant for batch size
     static const int BATCH_SIZE;
 
+    struct FilterCondition
+    {
+        size_t left_col_idx;
+        size_t right_col_idx;
+        bool is_literal;
+        unionV literal_value;
+        hsql::OperatorType op;
+        ColumnType col_type;
+        bool is_not;        // For NOT operator
+        bool is_null_check; // For IS NULL
+    };
+
     // Constructor and destructor
     GPUManager();
     ~GPUManager();
@@ -84,16 +96,6 @@ public:
         std::string alias;
         bool is_distinct;
         size_t column_index;
-    };
-
-    struct FilterCondition
-    {
-        size_t left_col_idx;
-        size_t right_col_idx;
-        bool is_literal;
-        unionV literal_value;
-        hsql::OperatorType op;
-        ColumnType col_type;
     };
 
     std::shared_ptr<Table> output_join_table;

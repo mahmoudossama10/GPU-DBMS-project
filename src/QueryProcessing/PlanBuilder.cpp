@@ -1043,7 +1043,8 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
             if (execution_mode_ == ExecutionMode::GPU)
             {
-                plan = buildGPUFilterPlan(std::move(plan), filters);
+                // plan = buildGPUFilterPlan(std::move(plan), filters);
+                plan = buildFilterPlan(std::move(plan), filters);
             }
             else
             {
@@ -1069,7 +1070,8 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
         if (execution_mode_ == ExecutionMode::GPU)
         {
-            plan = buildGPUFilterPlan(std::move(children[0]), filter_condition_string);
+            // plan = buildGPUFilterPlan(std::move(children[0]), filter_condition_string);
+            plan = buildFilterPlan(std::move(children[0]), filter_condition_string);
         }
         else
         {

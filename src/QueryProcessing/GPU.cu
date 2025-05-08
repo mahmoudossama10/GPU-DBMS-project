@@ -7,6 +7,12 @@
 #include <math.h>
 #include <chrono>
 #include <iostream>
+#include <memory>
+#include <vector>
+#include <stdexcept>
+#include <cmath>
+#include <set>
+
 // CUDA kernels
 const int GPUManager::BATCH_SIZE = 5000;
 #define BLOCK_SIZE_KOGGE_STONE 1024
@@ -3346,11 +3352,14 @@ std::vector<GPUManager::AggregateOp> GPUManager::parseAggregates(
 //////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////
 
-// Kernel for processing integer columns
 __global__ void evaluateIntFilterKernel(
     const int64_t *__restrict__ leftColumnData,
-    const int64_t *__restrict__ rightColumnData,
     const char *__restrict__ leftNulls,
+    const TheInteger *__restrict__ literalIntegers,
+    const double *__restrict__ leftDoubleData,
+    const TheDouble *__restrict__ literalDoubles,
+    const int64_t *__restrict__ rightColumnData,
+    const double *__restrict__ rightDoubleData,
     const char *__restrict__ rightNulls,
     const GPUManager::FilterCondition *__restrict__ conditions,
     int numConditions,
@@ -3373,47 +3382,97 @@ __global__ void evaluateIntFilterKernel(
             const GPUManager::FilterCondition &condition = conditions[c];
             bool match = false;
 
-            if (leftNulls[rowIdx] != 0 || (!condition.is_literal && rightNulls[rowIdx] != 0))
+            if (condition.is_null_check)
+            {
+                match = (leftNulls[rowIdx] != 0);
+            }
+            else if (leftNulls[rowIdx] != 0 || (!condition.is_literal && rightNulls[rowIdx] != 0))
             {
                 match = false; // Null values don't match
             }
             else
             {
-                int64_t leftValue = leftColumnData[rowIdx];
-                int64_t rightValue;
-
-                if (condition.is_literal)
+                if (condition.col_type == ColumnType::INTEGER)
                 {
-                    rightValue = condition.literal_value.i->value;
+                    int64_t leftValue = leftColumnData[rowIdx];
+                    int64_t rightValue;
+
+                    if (condition.is_literal)
+                    {
+                        rightValue = literalIntegers[c].value;
+                    }
+                    else
+                    {
+                        rightValue = rightColumnData[rowIdx];
+                    }
+
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = (leftValue == rightValue);
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = (leftValue != rightValue);
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue < rightValue);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue > rightValue);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue <= rightValue);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue >= rightValue);
+                        break;
+                    default:
+                        match = false;
+                    }
                 }
                 else
-                {
-                    rightValue = rightColumnData[rowIdx];
-                }
+                { // DOUBLE (type conversion)
+                    double leftValue = static_cast<double>(leftColumnData[rowIdx]);
+                    double rightValue;
 
-                switch (condition.op)
-                {
-                case hsql::kOpEquals:
-                    match = (leftValue == rightValue);
-                    break;
-                case hsql::kOpNotEquals:
-                    match = (leftValue != rightValue);
-                    break;
-                case hsql::kOpLess:
-                    match = (leftValue < rightValue);
-                    break;
-                case hsql::kOpGreater:
-                    match = (leftValue > rightValue);
-                    break;
-                case hsql::kOpLessEq:
-                    match = (leftValue <= rightValue);
-                    break;
-                case hsql::kOpGreaterEq:
-                    match = (leftValue >= rightValue);
-                    break;
-                default:
-                    match = false;
+                    if (condition.is_literal)
+                    {
+                        rightValue = literalDoubles[c].value;
+                    }
+                    else
+                    {
+                        rightValue = rightDoubleData[rowIdx];
+                    }
+
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = (fabs(leftValue - rightValue) < 1e-10);
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = (fabs(leftValue - rightValue) >= 1e-10);
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue < rightValue);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue > rightValue);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue <= rightValue);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue >= rightValue);
+                        break;
+                    default:
+                        match = false;
+                    }
                 }
+            }
+
+            if (condition.is_not)
+            {
+                match = !match;
             }
 
             if (isAnd)
@@ -3437,8 +3496,12 @@ __global__ void evaluateIntFilterKernel(
 // Kernel for processing double columns
 __global__ void evaluateDoubleFilterKernel(
     const double *__restrict__ leftColumnData,
-    const double *__restrict__ rightColumnData,
     const char *__restrict__ leftNulls,
+    const TheDouble *__restrict__ literalDoubles,
+    const int64_t *__restrict__ leftIntData,
+    const TheInteger *__restrict__ literalIntegers,
+    const double *__restrict__ rightColumnData,
+    const int64_t *__restrict__ rightIntData,
     const char *__restrict__ rightNulls,
     const GPUManager::FilterCondition *__restrict__ conditions,
     int numConditions,
@@ -3461,47 +3524,87 @@ __global__ void evaluateDoubleFilterKernel(
             const GPUManager::FilterCondition &condition = conditions[c];
             bool match = false;
 
-            if (leftNulls[rowIdx] != 0 || (!condition.is_literal && rightNulls[rowIdx] != 0))
+            if (condition.is_null_check)
+            {
+                match = isnan(leftColumnData[rowIdx]);
+            }
+            else if (leftNulls[rowIdx] != 0 || (!condition.is_literal && rightNulls[rowIdx] != 0))
             {
                 match = false;
             }
             else
             {
-                double leftValue = leftColumnData[rowIdx];
-                double rightValue;
-
-                if (condition.is_literal)
+                if (condition.col_type == ColumnType::DOUBLE)
                 {
-                    rightValue = condition.literal_value.d->value;
+                    double leftValue = leftColumnData[rowIdx];
+                    double rightValue;
+
+                    if (condition.is_literal)
+                    {
+                        rightValue = literalDoubles[c].value;
+                    }
+                    else
+                    {
+                        rightValue = rightColumnData[rowIdx];
+                    }
+
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = (fabs(leftValue - rightValue) < 1e-10);
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = (fabs(leftValue - rightValue) >= 1e-10);
+                    case hsql::kOpLess:
+                        match = (leftValue < rightValue);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue > rightValue);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue <= rightValue);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue >= rightValue);
+                        break;
+                    default:
+                        match = false;
+                    }
                 }
                 else
-                {
-                    rightValue = rightColumnData[rowIdx];
-                }
+                { // INTEGER (type conversion)
+                    double leftValue = leftColumnData[rowIdx];
+                    double rightValue = static_cast<double>(condition.is_literal ? literalIntegers[c].value : rightIntData[rowIdx]);
 
-                switch (condition.op)
-                {
-                case hsql::kOpEquals:
-                    match = (leftValue == rightValue);
-                    break;
-                case hsql::kOpNotEquals:
-                    match = (leftValue != rightValue);
-                    break;
-                case hsql::kOpLess:
-                    match = (leftValue < rightValue);
-                    break;
-                case hsql::kOpGreater:
-                    match = (leftValue > rightValue);
-                    break;
-                case hsql::kOpLessEq:
-                    match = (leftValue <= rightValue);
-                    break;
-                case hsql::kOpGreaterEq:
-                    match = (leftValue >= rightValue);
-                    break;
-                default:
-                    match = false;
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = (fabs(leftValue - rightValue) < 1e-10);
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = (fabs(leftValue - rightValue) >= 1e-10);
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue < rightValue);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue > rightValue);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue <= rightValue);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue >= rightValue);
+                        break;
+                    default:
+                        match = false;
+                    }
                 }
+            }
+
+            if (condition.is_not)
+            {
+                match = !match;
             }
 
             if (isAnd)
@@ -3550,7 +3653,11 @@ __global__ void evaluateStringFilterKernel(
             const GPUManager::FilterCondition &condition = conditions[c];
             bool match = false;
 
-            if (leftNulls[rowIdx] != 0 || !condition.is_literal)
+            if (condition.is_null_check)
+            {
+                match = (leftNulls[rowIdx] != 0);
+            }
+            else if (leftNulls[rowIdx] != 0 || !condition.is_literal)
             {
                 match = false; // Only support literal comparisons for strings
             }
@@ -3589,6 +3696,260 @@ __global__ void evaluateStringFilterKernel(
                 default:
                     match = false;
                 }
+            }
+
+            if (condition.is_not)
+            {
+                match = !match;
+            }
+
+            if (isAnd)
+            {
+                result = result && match;
+                if (!result)
+                    break;
+            }
+            else
+            {
+                result = result || match;
+                if (result)
+                    break;
+            }
+        }
+
+        results[rowIdx] = result ? 1 : 0;
+    }
+}
+
+// Kernel for processing datetime columns
+__global__ void evaluateDateTimeFilterKernel(
+    const dateTime *__restrict__ leftColumnData,
+    const char *__restrict__ leftNulls,
+    const dateTime *__restrict__ literalDateTimes,
+    const dateTime *__restrict__ rightColumnData,
+    const char *__restrict__ rightNulls,
+    const GPUManager::FilterCondition *__restrict__ conditions,
+    int numConditions,
+    int numRows,
+    int64_t *__restrict__ results,
+    bool isAnd)
+{
+    const int elementsPerThread = 4;
+    const int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+    for (int i = 0; i < elementsPerThread; i++)
+    {
+        int rowIdx = threadId * elementsPerThread + i;
+        if (rowIdx >= numRows)
+            return;
+
+        bool result = isAnd;
+        for (int c = 0; c < numConditions; c++)
+        {
+            const GPUManager::FilterCondition &condition = conditions[c];
+            bool match = false;
+
+            if (condition.is_null_check)
+            {
+                match = (leftNulls[rowIdx] != 0);
+            }
+            else if (leftNulls[rowIdx] != 0 || (!condition.is_literal && rightNulls[rowIdx] != 0))
+            {
+                match = false;
+            }
+            else
+            {
+                dateTime leftValue = leftColumnData[rowIdx];
+                dateTime rightValue = condition.is_literal ? literalDateTimes[c] : rightColumnData[rowIdx];
+
+                // Compare fields in order of significance
+                if (leftValue.year != rightValue.year)
+                {
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = false;
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = true;
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue.year < rightValue.year);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue.year <= rightValue.year);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue.year > rightValue.year);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue.year >= rightValue.year);
+                        break;
+                    default:
+                        match = false;
+                    }
+                }
+                else if (leftValue.month != rightValue.month)
+                {
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = false;
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = true;
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue.month < rightValue.month);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue.month <= rightValue.month);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue.month > rightValue.month);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue.month >= rightValue.month);
+                        break;
+                    default:
+                        match = false;
+                    }
+                }
+                else if (leftValue.day != rightValue.day)
+                {
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = false;
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = true;
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue.day < rightValue.day);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue.day <= rightValue.day);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue.day > rightValue.day);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue.day >= rightValue.day);
+                        break;
+                    default:
+                        match = false;
+                    }
+                }
+                else if (leftValue.hour != rightValue.hour)
+                {
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = false;
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = true;
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue.hour < rightValue.hour);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue.hour <= rightValue.hour);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue.hour > rightValue.hour);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue.hour >= rightValue.hour);
+                        break;
+                    default:
+                        match = false;
+                    }
+                }
+                else if (leftValue.minute != rightValue.minute)
+                {
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = false;
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = true;
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue.minute < rightValue.minute);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue.minute <= rightValue.minute);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue.minute > rightValue.minute);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue.minute >= rightValue.minute);
+                        break;
+                    default:
+                        match = false;
+                    }
+                }
+                else if (leftValue.second != rightValue.second)
+                {
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = false;
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = true;
+                        break;
+                    case hsql::kOpLess:
+                        match = (leftValue.second < rightValue.second);
+                        break;
+                    case hsql::kOpLessEq:
+                        match = (leftValue.second <= rightValue.second);
+                        break;
+                    case hsql::kOpGreater:
+                        match = (leftValue.second > rightValue.second);
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = (leftValue.second >= rightValue.second);
+                        break;
+                    default:
+                        match = false;
+                    }
+                }
+                else
+                {
+                    switch (condition.op)
+                    {
+                    case hsql::kOpEquals:
+                        match = true;
+                        break;
+                    case hsql::kOpNotEquals:
+                        match = false;
+                        break;
+                    case hsql::kOpLess:
+                        match = false;
+                        break;
+                    case hsql::kOpLessEq:
+                        match = true;
+                        break;
+                    case hsql::kOpGreater:
+                        match = false;
+                        break;
+                    case hsql::kOpGreaterEq:
+                        match = true;
+                        break;
+                    default:
+                        match = false;
+                    }
+                }
+            }
+
+            if (condition.is_not)
+            {
+                match = !match;
             }
 
             if (isAnd)
@@ -3677,6 +4038,7 @@ std::shared_ptr<Table> GPUManager::executeFilter(
     // Cache table headers and data to avoid repeated calls
     const auto &headers = table->getHeaders();
     const auto &tableData = table->getData();
+    const auto &columnTypes = table->getColumnTypes();
 
     // Group conditions by column
     std::unordered_map<std::string, std::vector<FilterCondition>> conditionsByColumn;
@@ -3687,20 +4049,75 @@ std::shared_ptr<Table> GPUManager::executeFilter(
     }
 
     // Process each column
-    for (const auto &pair : conditionsByColumn) 
+    for (const auto &[colName, colConditions] : conditionsByColumn)
     {
-        const auto &colName = pair.first;
-        const auto &colConditions = pair.second;
+        std::cout << "Processing column: " << colName << std::endl;
         ColumnType colType = table->getColumnType(colName);
         cudaStream_t stream;
         CUDA_CHECK(cudaStreamCreate(&stream));
 
+        // Prepare device memory for literal values
+        std::vector<TheInteger> integerLiterals;
+        std::vector<TheDouble> doubleLiterals;
+        std::vector<dateTime> dateTimeLiterals;
+        TheInteger *d_integerLiterals = nullptr;
+        TheDouble *d_doubleLiterals = nullptr;
+        dateTime *d_dateTimeLiterals = nullptr;
+
         // Copy conditions to device
         FilterCondition *d_conditions = nullptr;
         CUDA_CHECK(cudaMalloc(&d_conditions, colConditions.size() * sizeof(FilterCondition)));
-        CUDA_CHECK(cudaMemcpyAsync(d_conditions, colConditions.data(),
+        std::vector<FilterCondition> deviceConditions = colConditions;
+        for (size_t i = 0; i < colConditions.size(); ++i)
+        {
+            if (colConditions[i].is_literal && !colConditions[i].is_null_check)
+            {
+                switch (colConditions[i].col_type)
+                {
+                case ColumnType::INTEGER:
+                    integerLiterals.push_back(*colConditions[i].literal_value.i);
+                    deviceConditions[i].literal_value.i = nullptr;
+                    break;
+                case ColumnType::DOUBLE:
+                    doubleLiterals.push_back(*colConditions[i].literal_value.d);
+                    deviceConditions[i].literal_value.d = nullptr;
+                    break;
+                case ColumnType::STRING:
+                    deviceConditions[i].literal_value.s = nullptr;
+                    break;
+                case ColumnType::DATETIME:
+                    dateTimeLiterals.push_back(*colConditions[i].literal_value.t);
+                    deviceConditions[i].literal_value.t = nullptr;
+                    break;
+                }
+            }
+        }
+        CUDA_CHECK(cudaMemcpyAsync(d_conditions, deviceConditions.data(),
                                    colConditions.size() * sizeof(FilterCondition),
                                    cudaMemcpyHostToDevice, stream));
+
+        // Copy integer, double, and datetime literals to device
+        if (!integerLiterals.empty())
+        {
+            CUDA_CHECK(cudaMalloc(&d_integerLiterals, integerLiterals.size() * sizeof(TheInteger)));
+            CUDA_CHECK(cudaMemcpyAsync(d_integerLiterals, integerLiterals.data(),
+                                       integerLiterals.size() * sizeof(TheInteger),
+                                       cudaMemcpyHostToDevice, stream));
+        }
+        if (!doubleLiterals.empty())
+        {
+            CUDA_CHECK(cudaMalloc(&d_doubleLiterals, doubleLiterals.size() * sizeof(TheDouble)));
+            CUDA_CHECK(cudaMemcpyAsync(d_doubleLiterals, doubleLiterals.data(),
+                                       doubleLiterals.size() * sizeof(TheDouble),
+                                       cudaMemcpyHostToDevice, stream));
+        }
+        if (!dateTimeLiterals.empty())
+        {
+            CUDA_CHECK(cudaMalloc(&d_dateTimeLiterals, dateTimeLiterals.size() * sizeof(dateTime)));
+            CUDA_CHECK(cudaMemcpyAsync(d_dateTimeLiterals, dateTimeLiterals.data(),
+                                       dateTimeLiterals.size() * sizeof(dateTime),
+                                       cudaMemcpyHostToDevice, stream));
+        }
 
         // Handle string literals for STRING columns
         std::vector<char> literalStringData;
@@ -3713,7 +4130,7 @@ std::shared_ptr<Table> GPUManager::executeFilter(
             literalOffsets.push_back(0);
             for (const auto &condition : colConditions)
             {
-                if (condition.is_literal)
+                if (condition.is_literal && !condition.is_null_check)
                 {
                     const std::string &str = *condition.literal_value.s;
                     literalStringData.insert(literalStringData.end(), str.begin(), str.end());
@@ -3735,106 +4152,77 @@ std::shared_ptr<Table> GPUManager::executeFilter(
             }
         }
 
+        // Synchronize stream to ensure all data is copied
+        CUDA_CHECK(cudaStreamSynchronize(stream));
+
         switch (colType)
         {
         case ColumnType::INTEGER:
         {
+            std::cout << "Launching INTEGER kernel for " << colName << std::endl;
             const auto &columnData = tableData.at(colName);
             std::vector<int64_t> intData(numRows);
             std::vector<char> nullData(numRows);
+            std::vector<double> doubleData(numRows); // For type conversion
             for (size_t i = 0; i < numRows; i++)
             {
                 intData[i] = columnData[i].i->value;
                 nullData[i] = columnData[i].i->is_null ? 1 : 0;
+                doubleData[i] = static_cast<double>(columnData[i].i->value);
             }
 
             int64_t *d_column = nullptr;
             char *d_nulls = nullptr;
+            double *d_doubleColumn = nullptr;
             CUDA_CHECK(cudaMalloc(&d_column, numRows * sizeof(int64_t)));
             CUDA_CHECK(cudaMalloc(&d_nulls, numRows * sizeof(char)));
+            CUDA_CHECK(cudaMalloc(&d_doubleColumn, numRows * sizeof(double)));
             CUDA_CHECK(cudaMemcpyAsync(d_column, intData.data(),
                                        numRows * sizeof(int64_t),
                                        cudaMemcpyHostToDevice, stream));
             CUDA_CHECK(cudaMemcpyAsync(d_nulls, nullData.data(),
                                        numRows * sizeof(char),
                                        cudaMemcpyHostToDevice, stream));
-
-            int64_t *d_rightColumn = nullptr;
-            char *d_rightNulls = nullptr;
-            if (!colConditions[0].is_literal)
-            {
-                const auto &rightColumnData = tableData.at(headers[colConditions[0].right_col_idx]);
-                std::vector<int64_t> rightIntData(numRows);
-                std::vector<char> rightNullData(numRows);
-                for (size_t i = 0; i < numRows; i++)
-                {
-                    rightIntData[i] = rightColumnData[i].i->value;
-                    rightNullData[i] = rightColumnData[i].i->is_null ? 1 : 0;
-                }
-                CUDA_CHECK(cudaMalloc(&d_rightColumn, numRows * sizeof(int64_t)));
-                CUDA_CHECK(cudaMalloc(&d_rightNulls, numRows * sizeof(char)));
-                CUDA_CHECK(cudaMemcpyAsync(d_rightColumn, rightIntData.data(),
-                                           numRows * sizeof(int64_t),
-                                           cudaMemcpyHostToDevice, stream));
-                CUDA_CHECK(cudaMemcpyAsync(d_rightNulls, rightNullData.data(),
-                                           numRows * sizeof(char),
-                                           cudaMemcpyHostToDevice, stream));
-            }
-
-            const int blockSize = 256;
-            const int elementsPerThread = 4;
-            const int effectiveThreads = (numRows + elementsPerThread - 1) / elementsPerThread;
-            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
-
-            evaluateIntFilterKernel<<<gridSize, blockSize, 0, stream>>>(
-                d_column, d_rightColumn, d_nulls, d_rightNulls,
-                d_conditions, colConditions.size(), numRows, d_results, isAnd);
-
-            CUDA_CHECK(cudaFree(d_column));
-            CUDA_CHECK(cudaFree(d_nulls));
-            if (d_rightColumn)
-                CUDA_CHECK(cudaFree(d_rightColumn));
-            if (d_rightNulls)
-                CUDA_CHECK(cudaFree(d_rightNulls));
-            break;
-        }
-        case ColumnType::DOUBLE:
-        {
-            const auto &columnData = tableData.at(colName);
-            std::vector<double> doubleData(numRows);
-            std::vector<char> nullData(numRows);
-            for (size_t i = 0; i < numRows; i++)
-            {
-                doubleData[i] = columnData[i].d->value;
-                nullData[i] = columnData[i].d->is_null ? 1 : 0;
-            }
-
-            double *d_column = nullptr;
-            char *d_nulls = nullptr;
-            CUDA_CHECK(cudaMalloc(&d_column, numRows * sizeof(double)));
-            CUDA_CHECK(cudaMalloc(&d_nulls, numRows * sizeof(char)));
-            CUDA_CHECK(cudaMemcpyAsync(d_column, doubleData.data(),
+            CUDA_CHECK(cudaMemcpyAsync(d_doubleColumn, doubleData.data(),
                                        numRows * sizeof(double),
                                        cudaMemcpyHostToDevice, stream));
-            CUDA_CHECK(cudaMemcpyAsync(d_nulls, nullData.data(),
-                                       numRows * sizeof(char),
-                                       cudaMemcpyHostToDevice, stream));
 
-            double *d_rightColumn = nullptr;
+            int64_t *d_rightColumn = nullptr;
+            double *d_rightDoubleColumn = nullptr;
             char *d_rightNulls = nullptr;
-            if (!colConditions[0].is_literal)
+            if (!colConditions[0].is_literal && !colConditions[0].is_null_check)
             {
+                if (colConditions[0].right_col_idx >= headers.size())
+                {
+                    throw std::runtime_error("Invalid right column index: " + std::to_string(colConditions[0].right_col_idx));
+                }
                 const auto &rightColumnData = tableData.at(headers[colConditions[0].right_col_idx]);
+                ColumnType rightType = columnTypes.at(headers[colConditions[0].right_col_idx]);
+                std::vector<int64_t> rightIntData(numRows);
                 std::vector<double> rightDoubleData(numRows);
                 std::vector<char> rightNullData(numRows);
                 for (size_t i = 0; i < numRows; i++)
                 {
-                    rightDoubleData[i] = rightColumnData[i].d->value;
-                    rightNullData[i] = rightColumnData[i].d->is_null ? 1 : 0;
+                    if (rightType == ColumnType::INTEGER)
+                    {
+                        rightIntData[i] = rightColumnData[i].i->value;
+                        rightDoubleData[i] = static_cast<double>(rightColumnData[i].i->value);
+                        rightNullData[i] = rightColumnData[i].i->is_null ? 1 : 0;
+                    }
+                    else
+                    { // DOUBLE
+                        rightDoubleData[i] = rightColumnData[i].d->value;
+                        rightIntData[i] = static_cast<int64_t>(rightColumnData[i].d->value);
+                        rightNullData[i] = rightColumnData[i].d->is_null ? 1 : 0;
+                    }
                 }
-                CUDA_CHECK(cudaMalloc(&d_rightColumn, numRows * sizeof(double)));
+                CUDA_CHECK(cudaMalloc(&d_rightColumn, numRows * sizeof(int64_t)));
+                CUDA_CHECK(cudaMalloc(&d_rightDoubleColumn, numRows * sizeof(double)));
                 CUDA_CHECK(cudaMalloc(&d_rightNulls, numRows * sizeof(char)));
-                CUDA_CHECK(cudaMemcpyAsync(d_rightColumn, rightDoubleData.data(),
+                CUDA_CHECK(cudaMemcpyAsync(d_rightColumn, rightIntData.data(),
+                                           numRows * sizeof(int64_t),
+                                           cudaMemcpyHostToDevice, stream));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightDoubleColumn, rightDoubleData.data(),
                                            numRows * sizeof(double),
                                            cudaMemcpyHostToDevice, stream));
                 CUDA_CHECK(cudaMemcpyAsync(d_rightNulls, rightNullData.data(),
@@ -3847,20 +4235,129 @@ std::shared_ptr<Table> GPUManager::executeFilter(
             const int effectiveThreads = (numRows + elementsPerThread - 1) / elementsPerThread;
             const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
 
-            evaluateDoubleFilterKernel<<<gridSize, blockSize, 0, stream>>>(
-                d_column, d_rightColumn, d_nulls, d_rightNulls,
+            evaluateIntFilterKernel<<<gridSize, blockSize, 0, stream>>>(
+                d_column, d_nulls, d_integerLiterals, d_doubleColumn, d_doubleLiterals,
+                d_rightColumn, d_rightDoubleColumn, d_rightNulls,
                 d_conditions, colConditions.size(), numRows, d_results, isAnd);
 
+            CUDA_CHECK(cudaStreamSynchronize(stream));
             CUDA_CHECK(cudaFree(d_column));
             CUDA_CHECK(cudaFree(d_nulls));
+            CUDA_CHECK(cudaFree(d_doubleColumn));
             if (d_rightColumn)
                 CUDA_CHECK(cudaFree(d_rightColumn));
+            if (d_rightDoubleColumn)
+                CUDA_CHECK(cudaFree(d_rightDoubleColumn));
             if (d_rightNulls)
                 CUDA_CHECK(cudaFree(d_rightNulls));
+            if (d_integerLiterals)
+                CUDA_CHECK(cudaFree(d_integerLiterals));
+            if (d_doubleLiterals)
+                CUDA_CHECK(cudaFree(d_doubleLiterals));
+            break;
+        }
+        case ColumnType::DOUBLE:
+        {
+            std::cout << "Launching DOUBLE kernel for " << colName << std::endl;
+            const auto &columnData = tableData.at(colName);
+            std::vector<double> doubleData(numRows);
+            std::vector<char> nullData(numRows);
+            std::vector<int64_t> intData(numRows); // For type conversion
+            for (size_t i = 0; i < numRows; i++)
+            {
+                doubleData[i] = columnData[i].d->value;
+                nullData[i] = columnData[i].d->is_null ? 1 : 0;
+                intData[i] = static_cast<int64_t>(columnData[i].d->value);
+            }
+
+            double *d_column = nullptr;
+            char *d_nulls = nullptr;
+            int64_t *d_intColumn = nullptr;
+            CUDA_CHECK(cudaMalloc(&d_column, numRows * sizeof(double)));
+            CUDA_CHECK(cudaMalloc(&d_nulls, numRows * sizeof(char)));
+            CUDA_CHECK(cudaMalloc(&d_intColumn, numRows * sizeof(int64_t)));
+            CUDA_CHECK(cudaMemcpyAsync(d_column, doubleData.data(),
+                                       numRows * sizeof(double),
+                                       cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_nulls, nullData.data(),
+                                       numRows * sizeof(char),
+                                       cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_intColumn, intData.data(),
+                                       numRows * sizeof(int64_t),
+                                       cudaMemcpyHostToDevice, stream));
+
+            double *d_rightColumn = nullptr;
+            int64_t *d_rightIntColumn = nullptr;
+            char *d_rightNulls = nullptr;
+            if (!colConditions[0].is_literal && !colConditions[0].is_null_check)
+            {
+                if (colConditions[0].right_col_idx >= headers.size())
+                {
+                    throw std::runtime_error("Invalid right column index: " + std::to_string(colConditions[0].right_col_idx));
+                }
+                const auto &rightColumnData = tableData.at(headers[colConditions[0].right_col_idx]);
+                ColumnType rightType = columnTypes.at(headers[colConditions[0].right_col_idx]);
+                std::vector<double> rightDoubleData(numRows);
+                std::vector<int64_t> rightIntData(numRows);
+                std::vector<char> rightNullData(numRows);
+                for (size_t i = 0; i < numRows; i++)
+                {
+                    if (rightType == ColumnType::DOUBLE)
+                    {
+                        rightDoubleData[i] = rightColumnData[i].d->value;
+                        rightIntData[i] = static_cast<int64_t>(rightColumnData[i].d->value);
+                        rightNullData[i] = rightColumnData[i].d->is_null ? 1 : 0;
+                    }
+                    else
+                    { // INTEGER
+                        rightIntData[i] = rightColumnData[i].i->value;
+                        rightDoubleData[i] = static_cast<double>(rightColumnData[i].i->value);
+                        rightNullData[i] = rightColumnData[i].i->is_null ? 1 : 0;
+                    }
+                }
+                CUDA_CHECK(cudaMalloc(&d_rightColumn, numRows * sizeof(double)));
+                CUDA_CHECK(cudaMalloc(&d_rightIntColumn, numRows * sizeof(int64_t)));
+                CUDA_CHECK(cudaMalloc(&d_rightNulls, numRows * sizeof(char)));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightColumn, rightDoubleData.data(),
+                                           numRows * sizeof(double),
+                                           cudaMemcpyHostToDevice, stream));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightIntColumn, rightIntData.data(),
+                                           numRows * sizeof(int64_t),
+                                           cudaMemcpyHostToDevice, stream));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightNulls, rightNullData.data(),
+                                           numRows * sizeof(char),
+                                           cudaMemcpyHostToDevice, stream));
+            }
+
+            const int blockSize = 256;
+            const int elementsPerThread = 4;
+            const int effectiveThreads = (numRows + elementsPerThread - 1) / elementsPerThread;
+            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
+
+            evaluateDoubleFilterKernel<<<gridSize, blockSize, 0, stream>>>(
+                d_column, d_nulls, d_doubleLiterals, d_intColumn, d_integerLiterals,
+                d_rightColumn, d_rightIntColumn, d_rightNulls,
+                d_conditions, colConditions.size(), numRows, d_results, isAnd);
+
+            CUDA_CHECK(cudaStreamSynchronize(stream));
+            CUDA_CHECK(cudaFree(d_column));
+            CUDA_CHECK(cudaFree(d_nulls));
+            CUDA_CHECK(cudaFree(d_intColumn));
+            if (d_rightColumn)
+                CUDA_CHECK(cudaFree(d_rightColumn));
+            if (d_rightIntColumn)
+                CUDA_CHECK(cudaFree(d_rightIntColumn));
+            if (d_rightNulls)
+                CUDA_CHECK(cudaFree(d_rightNulls));
+            if (d_integerLiterals)
+                CUDA_CHECK(cudaFree(d_integerLiterals));
+            if (d_doubleLiterals)
+                CUDA_CHECK(cudaFree(d_doubleLiterals));
             break;
         }
         case ColumnType::STRING:
         {
+            std::cout << "Launching STRING kernel for " << colName << std::endl;
             const auto &columnData = tableData.at(colName);
             std::vector<int> stringOffsets(numRows);
             std::vector<char> nullData(numRows);
@@ -3904,6 +4401,7 @@ std::shared_ptr<Table> GPUManager::executeFilter(
                 d_stringData, d_stringOffsets, d_literalStrings, d_literalOffsets,
                 d_nulls, d_conditions, colConditions.size(), numRows, d_results, isAnd);
 
+            CUDA_CHECK(cudaStreamSynchronize(stream));
             CUDA_CHECK(cudaFree(d_stringData));
             CUDA_CHECK(cudaFree(d_stringOffsets));
             CUDA_CHECK(cudaFree(d_nulls));
@@ -3915,14 +4413,78 @@ std::shared_ptr<Table> GPUManager::executeFilter(
         }
         case ColumnType::DATETIME:
         {
-            throw std::runtime_error("DATETIME filtering not implemented");
+            std::cout << "Launching DATETIME kernel for " << colName << std::endl;
+            const auto &columnData = tableData.at(colName);
+            std::vector<dateTime> dateTimeData(numRows);
+            std::vector<char> nullData(numRows);
+            for (size_t i = 0; i < numRows; i++)
+            {
+                dateTimeData[i] = *columnData[i].t;
+                nullData[i] = 0;
+            }
+
+            dateTime *d_column = nullptr;
+            char *d_nulls = nullptr;
+            CUDA_CHECK(cudaMalloc(&d_column, numRows * sizeof(dateTime)));
+            CUDA_CHECK(cudaMalloc(&d_nulls, numRows * sizeof(char)));
+            CUDA_CHECK(cudaMemcpyAsync(d_column, dateTimeData.data(),
+                                       numRows * sizeof(dateTime),
+                                       cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_nulls, nullData.data(),
+                                       numRows * sizeof(char),
+                                       cudaMemcpyHostToDevice, stream));
+
+            dateTime *d_rightColumn = nullptr;
+            char *d_rightNulls = nullptr;
+            if (!colConditions[0].is_literal && !colConditions[0].is_null_check)
+            {
+                if (colConditions[0].right_col_idx >= headers.size())
+                {
+                    throw std::runtime_error("Invalid right column index: " + std::to_string(colConditions[0].right_col_idx));
+                }
+                const auto &rightColumnData = tableData.at(headers[colConditions[0].right_col_idx]);
+                std::vector<dateTime> rightDateTimeData(numRows);
+                std::vector<char> rightNullData(numRows);
+                for (size_t i = 0; i < numRows; i++)
+                {
+                    rightDateTimeData[i] = *rightColumnData[i].t;
+                    rightNullData[i] = 0;
+                }
+                CUDA_CHECK(cudaMalloc(&d_rightColumn, numRows * sizeof(dateTime)));
+                CUDA_CHECK(cudaMalloc(&d_rightNulls, numRows * sizeof(char)));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightColumn, rightDateTimeData.data(),
+                                           numRows * sizeof(dateTime),
+                                           cudaMemcpyHostToDevice, stream));
+                CUDA_CHECK(cudaMemcpyAsync(d_rightNulls, rightNullData.data(),
+                                           numRows * sizeof(char),
+                                           cudaMemcpyHostToDevice, stream));
+            }
+
+            const int blockSize = 256;
+            const int elementsPerThread = 4;
+            const int effectiveThreads = (numRows + elementsPerThread - 1) / elementsPerThread;
+            const int gridSize = (effectiveThreads + blockSize - 1) / blockSize;
+
+            evaluateDateTimeFilterKernel<<<gridSize, blockSize, 0, stream>>>(
+                d_column, d_nulls, d_dateTimeLiterals, d_rightColumn, d_rightNulls,
+                d_conditions, colConditions.size(), numRows, d_results, isAnd);
+
+            CUDA_CHECK(cudaStreamSynchronize(stream));
+            CUDA_CHECK(cudaFree(d_column));
+            CUDA_CHECK(cudaFree(d_nulls));
+            if (d_rightColumn)
+                CUDA_CHECK(cudaFree(d_rightColumn));
+            if (d_rightNulls)
+                CUDA_CHECK(cudaFree(d_rightNulls));
+            if (d_dateTimeLiterals)
+                CUDA_CHECK(cudaFree(d_dateTimeLiterals));
+            break;
         }
         default:
             throw std::runtime_error("Unsupported column type for GPU filtering");
         }
 
         CUDA_CHECK(cudaFree(d_conditions));
-        CUDA_CHECK(cudaStreamSynchronize(stream));
         CUDA_CHECK(cudaStreamDestroy(stream));
     }
 
@@ -3932,11 +4494,16 @@ std::shared_ptr<Table> GPUManager::executeFilter(
     CUDA_CHECK(cudaFree(d_results));
 
     // Create filtered table
-    auto resultTable = std::make_shared<Table>("filtered_" + table->getName(), table->getHeaders(), std::unordered_map<std::string, std::vector<unionV>>(), table->getColumnTypes());
+    std::unordered_map<std::string, std::vector<unionV>> emptyColumnData;
     for (const auto &colName : headers)
     {
-        resultTable->addColumn(colName, std::vector<unionV>(), table->getColumnType(colName));
+        emptyColumnData[colName] = std::vector<unionV>();
     }
+    auto resultTable = std::make_shared<Table>(
+        "filtered_" + table->getName(),
+        headers,
+        emptyColumnData,
+        columnTypes);
 
     // Copy passing rows
     for (size_t i = 0; i < numRows; i++)
@@ -3951,7 +4518,7 @@ std::shared_ptr<Table> GPUManager::executeFilter(
     // Clean up conditions
     for (auto &condition : conditions)
     {
-        if (condition.is_literal)
+        if (condition.is_literal && !condition.is_null_check)
         {
             switch (condition.col_type)
             {
@@ -3996,11 +4563,26 @@ bool GPUManager::parseFilterConditions(
             return parseFilterConditions(table, expr->expr, conditions) &&
                    parseFilterConditions(table, expr->expr2, conditions);
         }
-
-        if (isComparisonOperator(expr->opType))
+        else if (expr->opType == hsql::kOpNot)
+        {
+            std::vector<FilterCondition> subConditions;
+            if (!parseFilterConditions(table, expr->expr, subConditions))
+            {
+                return false;
+            }
+            for (auto &condition : subConditions)
+            {
+                condition.is_not = true;
+                conditions.push_back(condition);
+            }
+            return true;
+        }
+        else if (isComparisonOperator(expr->opType))
         {
             FilterCondition condition;
             condition.op = expr->opType;
+            condition.is_not = false;
+            condition.is_null_check = false;
 
             if (expr->expr->type != hsql::kExprColumnRef)
             {
@@ -4023,11 +4605,17 @@ bool GPUManager::parseFilterConditions(
                 condition.is_literal = false;
                 std::string rightColName = expr->expr2->name;
                 auto rightIt = std::find(columnNames.begin(), columnNames.end(), rightColName);
-                if (rightIt == columnNames.end() || table->getColumnType(rightColName) != condition.col_type)
+                if (rightIt == columnNames.end())
                 {
                     return false;
                 }
                 condition.right_col_idx = std::distance(columnNames.begin(), rightIt);
+                // Use the more precise type (DOUBLE > INTEGER)
+                ColumnType rightType = table->getColumnType(rightColName);
+                if (rightType == ColumnType::DOUBLE && condition.col_type == ColumnType::INTEGER)
+                {
+                    condition.col_type = ColumnType::DOUBLE;
+                }
             }
             else
             {
@@ -4035,13 +4623,12 @@ bool GPUManager::parseFilterConditions(
                 switch (expr->expr2->type)
                 {
                 case hsql::kExprLiteralInt:
-                    if (condition.col_type != ColumnType::INTEGER)
+                    if (condition.col_type != ColumnType::INTEGER && condition.col_type != ColumnType::DOUBLE)
                         return false;
                     condition.literal_value.i = new TheInteger{expr->expr2->ival, false};
                     break;
                 case hsql::kExprLiteralFloat:
-                    if (condition.col_type != ColumnType::DOUBLE)
-                        return false;
+                    condition.col_type = ColumnType::DOUBLE; // Force DOUBLE for float literals
                     condition.literal_value.d = new TheDouble{expr->expr2->fval, false};
                     break;
                 case hsql::kExprLiteralString:
@@ -4054,6 +4641,30 @@ bool GPUManager::parseFilterConditions(
                 }
             }
 
+            conditions.push_back(condition);
+            return true;
+        }
+        return false;
+
+    case hsql::kExprLiteralNull:
+        if (expr->expr && expr->expr->type == hsql::kExprColumnRef)
+        {
+            FilterCondition condition;
+            condition.op = hsql::kOpEquals; // Dummy operator for IS NULL
+            condition.is_not = false;
+            condition.is_null_check = true;
+            condition.is_literal = false;
+
+            std::string colName = expr->expr->name;
+            const auto &columnNames = table->getHeaders();
+            auto it = std::find(columnNames.begin(), columnNames.end(), colName);
+            if (it == columnNames.end())
+            {
+                return false;
+            }
+
+            condition.left_col_idx = std::distance(columnNames.begin(), it);
+            condition.col_type = table->getColumnType(colName);
             conditions.push_back(condition);
             return true;
         }
