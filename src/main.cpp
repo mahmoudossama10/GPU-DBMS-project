@@ -7,63 +7,187 @@
 #include <regex>
 #include <vector>
 #include <string>
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+#include <stack>
+#include <chrono>
 
-std::vector<std::string> extractTableNames(const std::string &query)
+using namespace std;
+using namespace std::chrono;
+
+std::string trim(const std::string &str)
 {
-    std::vector<std::string> tables;
-    std::string lowered = query;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(), ::tolower);
+    const std::string whitespace = " \t\r\n";
+    const auto start = str.find_first_not_of(whitespace);
+    if (start == std::string::npos)
+        return "";
+    const auto end = str.find_last_not_of(whitespace);
+    return str.substr(start, end - start + 1);
+}
 
-    size_t pos = 0;
-    while ((pos = lowered.find("from", pos)) != std::string::npos)
+std::string readSQLQueryFromFile(const std::string &filepath)
+{
+    std::ifstream file(filepath);
+    if (!file.is_open())
     {
-        // Skip "from" inside quotes or subqueries
-        size_t start = pos + 4;
-        int paren_count = 0;
-        bool in_quotes = false;
-        size_t end = start;
-
-        while (end < query.size())
-        {
-            char c = query[end];
-            if (c == '\'')
-                in_quotes = !in_quotes;
-            else if (!in_quotes)
-            {
-                if (c == '(')
-                    ++paren_count;
-                else if (c == ')')
-                    --paren_count;
-                else if ((paren_count == 0) && query.substr(end, 5) == "where")
-                    break;
-            }
-            ++end;
-        }
-
-        std::string from_clause = query.substr(start, end - start);
-
-        // Extract table names (ignore aliases and AS)
-        std::regex table_regex(R"(([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+(?:AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*)?)");
-        auto begin = std::sregex_iterator(from_clause.begin(), from_clause.end(), table_regex);
-        auto finish = std::sregex_iterator();
-
-        for (auto it = begin; it != finish; ++it)
-        {
-            tables.push_back(it->str(1)); // table name
-        }
-
-        pos = end;
+        throw std::runtime_error("Failed to open file: " + filepath);
     }
+
+    std::string line;
+    std::ostringstream query_stream;
+
+    while (std::getline(file, line))
+    {
+        query_stream << trim(line) << ' ';
+    }
+
+    file.close();
+    std::string query = query_stream.str();
+
+    // Final clean-up: collapse multiple spaces into one
+    query.erase(std::unique(query.begin(), query.end(),
+                            [](char a, char b)
+                            { return a == ' ' && b == ' '; }),
+                query.end());
+
+    return query;
+}
+
+vector<string> extractTableNames(const string &sql);
+
+void processTableReference(const string &ref, vector<string> &tables)
+{
+    string trimmed = trim(ref);
+    if (trimmed.empty())
+        return;
+
+    if (trimmed[0] == '(')
+    {
+        size_t start = trimmed.find('(');
+        size_t end = trimmed.rfind(')');
+        if (start != string::npos && end != string::npos && end > start)
+        {
+            string subquery = trimmed.substr(start + 1, end - start - 1);
+            vector<string> subTables = extractTableNames(subquery);
+            tables.insert(tables.end(), subTables.begin(), subTables.end());
+        }
+    }
+    else
+    {
+        istringstream iss(trimmed);
+        string tableName;
+        iss >> tableName;
+        tables.push_back(tableName);
+    }
+}
+
+vector<string> splitTableReferences(const string &clause)
+{
+    vector<string> refs;
+    string current;
+    int parenLevel = 0;
+
+    for (char c : clause)
+    {
+        if (c == '(')
+            parenLevel++;
+        else if (c == ')')
+            parenLevel--;
+
+        if (c == ',' && parenLevel == 0)
+        {
+            refs.push_back(trim(current));
+            current.clear();
+        }
+        else
+        {
+            current += c;
+        }
+    }
+    if (!current.empty())
+        refs.push_back(trim(current));
+
+    return refs;
+}
+
+vector<string> extractTableNames(const string &sql)
+{
+    vector<string> tables;
+    regex from_regex("\\bfrom\\b", regex::icase);
+    sregex_iterator it(sql.begin(), sql.end(), from_regex);
+
+    for (; it != sregex_iterator(); ++it)
+    {
+        size_t from_pos = it->position() + it->length();
+        size_t end_pos = sql.find_first_of(";)", from_pos);
+        if (end_pos == string::npos)
+            end_pos = sql.length();
+
+        string clause = sql.substr(from_pos, end_pos - from_pos);
+        vector<string> refs = splitTableReferences(clause);
+
+        for (const string &ref : refs)
+        {
+            processTableReference(ref, tables);
+        }
+    }
+
+    // Remove duplicates
+    sort(tables.begin(), tables.end());
+    tables.erase(unique(tables.begin(), tables.end()), tables.end());
 
     return tables;
 }
 
-// int main()
+// int main(int argc, char *argv[])
 // {
-//     std::string query = "SELECT * FROM aoz a, (SELECT * FROM nested1 n1, nested2 AS n2 WHERE n1.id = n2.id) AS subq, aoz2 b WHERE a.name = b.name;";
-//     auto tables = extractTableNames(query);
-//     for (const auto &t : tables)
-//         std::cout << t << std::endl;
+
+//     auto start = high_resolution_clock::now();
+
+//     if (argc < 3)
+//     {
+//         std::cerr << "Usage: " << argv[0] << " <inputDirectory> <queryFilePath>" << std::endl;
+//         return 1;
+//     }
+
+//     try
+//     {
+//         CommandLineInterface cli;
+
+//         std::string inputDirectory = argv[1];
+//         std::string queryFilePath = argv[2];
+
+//         std::string query = readSQLQueryFromFile(queryFilePath);
+
+//         if (!inputDirectory.empty() && inputDirectory.back() != '/')
+//         {
+//             inputDirectory += "/";
+//         }
+
+//         auto tableNames = extractTableNames(query);
+
+//         for (const auto &table : tableNames)
+//         {
+//             std::vector<std::string> loadCommand = {table, inputDirectory + table + ".csv"};
+//             cli.handleLoadCommand(loadCommand);
+//         }
+
+//         cli.storageManager->inputDirectory = inputDirectory;
+//         cli.processQuery(query);
+//     }
+//     catch (const std::exception &e)
+//     {
+//         std::cerr << "Fatal error: " << e.what() << std::endl;
+//         return 1;
+//     }
+
+//     auto end = high_resolution_clock::now();
+
+//     auto duration = duration_cast<milliseconds>(end - start);
+
+//     std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+//     return 0;
 // }
 
 int main()
@@ -71,6 +195,9 @@ int main()
     try
     {
         CommandLineInterface cli;
+
+        std::string inputDirectory = "../../data/input/";
+        cli.storageManager->inputDirectory = inputDirectory;
         cli.run();
     }
     catch (const std::exception &e)
@@ -79,20 +206,5 @@ int main()
         return 1;
     }
 
-    // try
-    // {
-    //     std::string input_directory = "../../data/input/";
-    //     std::string query = "SELECT * FROM aoz a, aoz2 b WHERE a.name = b.name;";
-
-    //     auto tableNames = extractTableNames(query);
-
-    //     CommandLineInterface cli;
-    //     cli.run();
-    // }
-    // catch (const std::exception &e)
-    // {
-    //     std::cerr << "Fatal error: " << e.what() << std::endl;
-    //     return 1;
-    // }
     return 0;
 }

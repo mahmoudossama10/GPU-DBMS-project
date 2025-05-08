@@ -305,7 +305,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
         hsql::SQLParser::parse(subQuery.modified_query, &result2);
         const auto *stmt2 = result2.getStatement(0);
 
-        std::string outputPath = "../../data/input/sub_query.csv";
+        std::string outputPath = storage_->inputDirectory + "sub_query.csv";
         CSVProcessor::saveCSV(outputPath, resultTable->getHeaders(), resultTable->getData(), resultTable->getColumnTypes()); // CSVProcessor needs to be updated too
         std::cout << "Saved output to '" << outputPath << "'\n";
 

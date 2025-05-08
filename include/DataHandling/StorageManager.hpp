@@ -15,4 +15,5 @@ public:
     std::vector<std::string> listTables() const;
 
     std::unordered_map<std::string, std::unique_ptr<Table>> tables;
+    std::string inputDirectory;
 };
