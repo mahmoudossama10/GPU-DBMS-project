@@ -209,20 +209,14 @@ void CommandLineInterface::processQuery(const std::string &query)
                     switch (columnTypes.at(colName))
                     {
                     case ColumnType::INTEGER:
-                    {
-                        auto i = columnData.at(colName)[rowIdx].i;
-                        std::cout << i->is_null ? "" : std::to_string(i->value);
-                    }
-                    break;
+                        std::cout << columnData.at(colName)[rowIdx].i->value;
+                        break;
                     case ColumnType::STRING:
                         std::cout << *(columnData.at(colName)[rowIdx].s);
                         break;
                     case ColumnType::DOUBLE:
-                    {
-                        auto d = columnData.at(colName)[rowIdx].d;
-                        std::cout << d->is_null ? "" : std::to_string(d->value);
-                    }
-                    break;
+                        std::cout << columnData.at(colName)[rowIdx].d->value;
+                        break;
                     default:
                         throw std::runtime_error("Unsupported column type");
                     }
@@ -345,15 +339,15 @@ void CommandLineInterface::handleTestCommand()
         // {8, "SELECT * FROM people WHERE birthday < '2000-01-01'"},
         // {9, "SELECT * FROM people WHERE status = 'active'"},
         // FILTERING WITH AND / OR
-        {10, "SELECT * FROM people WHERE age > 30 AND salary >= 50000"},
-        {11, "SELECT * FROM people WHERE status = 'active' OR birthday > '1990-01-01'"},
-        {12, "SELECT * FROM people WHERE name = 'Ahmed' AND age <= 40 AND salary > 45000"},
+        // {10, "SELECT * FROM people WHERE age > 30 AND salary >= 50000"},
+        // {11, "SELECT * FROM people WHERE status = 'active' OR birthday > '1990-01-01'"},
+        // {12, "SELECT * FROM people WHERE name = 'Ahmed' AND age <= 40 AND salary > 45000"},
         // {13, "SELECT * FROM people WHERE name = 'Sara' OR (age > 35 AND salary < 70000)"},
         // NESTED QUERIES
         // {14, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
         // {15, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
         // JOIN
-        // {16, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id = d.id"},
+        {16, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id = d.id"},
         // {17, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.id = d.id AND p.salary >= 40000"},
         // MULTIPLE TABLES
         // {18, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id = d.id AND m.id = 1"},

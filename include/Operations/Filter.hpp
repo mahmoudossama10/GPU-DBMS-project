@@ -47,8 +47,8 @@ private:
 
     // Type-specific comparison handlers
     static bool compareStrings(const std::string &lhs, const std::string &rhs, hsql::OperatorType op);
-    static bool compareIntegers(int64_t lhs, int64_t rhs, hsql::OperatorType op);
-    static bool compareDoubles(double lhs, double rhs, hsql::OperatorType op);
+    static bool compareIntegers(unionV lhs, unionV rhs, hsql::OperatorType op);
+    static bool compareDoubles(unionV lhs, unionV rhs, hsql::OperatorType op);
     static bool compareDateTimes(const dateTime &lhs, const dateTime &rhs, hsql::OperatorType op);
 
     static bool handleComparison(

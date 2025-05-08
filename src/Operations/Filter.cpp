@@ -333,9 +333,12 @@ bool Filter::handleComparison(
             (lhsType == ColumnType::DOUBLE && rhsType == ColumnType::INTEGER))
         {
             // Convert to double comparison
-            double lhsDouble = (lhsType == ColumnType::INTEGER) ? static_cast<double>(lhsValue.i->value) : lhsValue.d->value;
-            double rhsDouble = (rhsType == ColumnType::INTEGER) ? static_cast<double>(rhsValue.i->value) : rhsValue.d->value;
-            return compareDoubles(lhsDouble, rhsDouble, expr->opType);
+
+            lhsValue.d->value = (lhsType == ColumnType::INTEGER) ? static_cast<double>(lhsValue.i->value) : lhsValue.d->value;
+            lhsValue.d->is_null = (lhsType == ColumnType::INTEGER) ? static_cast<double>(lhsValue.i->is_null) : lhsValue.d->is_null;
+            rhsValue.d->value = (rhsType == ColumnType::INTEGER) ? static_cast<double>(rhsValue.i->value) : rhsValue.d->value;
+            rhsValue.d->is_null = (rhsType == ColumnType::INTEGER) ? static_cast<double>(rhsValue.i->is_null) : rhsValue.d->is_null;
+            return compareDoubles(lhsValue, rhsValue, expr->opType);
         }
         else
         {
@@ -365,11 +368,11 @@ bool Filter::handleComparison(
     break;
 
     case ColumnType::INTEGER:
-        result = compareIntegers(lhsValue.i->value, rhsValue.i->value, expr->opType);
+        result = compareIntegers(lhsValue, rhsValue, expr->opType);
         break;
 
     case ColumnType::DOUBLE:
-        result = compareDoubles(lhsValue.d->value, rhsValue.d->value, expr->opType);
+        result = compareDoubles(lhsValue, rhsValue, expr->opType);
         break;
 
     case ColumnType::DATETIME:
@@ -406,8 +409,17 @@ bool Filter::compareStrings(const std::string &lhs, const std::string &rhs, hsql
     }
 }
 
-bool Filter::compareIntegers(int64_t lhs, int64_t rhs, hsql::OperatorType op)
+bool Filter::compareIntegers(unionV LHS, unionV RHS, hsql::OperatorType op)
 {
+    // Check for NULL values in LHS or RHS
+    if (LHS.i->is_null || RHS.i->is_null)
+    {
+        return false;
+    }
+
+    // Perform comparison if both values are not NULL
+    int64_t lhs = LHS.i->value;
+    int64_t rhs = RHS.i->value;
     switch (op)
     {
     case hsql::kOpEquals:
@@ -427,8 +439,17 @@ bool Filter::compareIntegers(int64_t lhs, int64_t rhs, hsql::OperatorType op)
     }
 }
 
-bool Filter::compareDoubles(double lhs, double rhs, hsql::OperatorType op)
+bool Filter::compareDoubles(unionV LHS, unionV RHS, hsql::OperatorType op)
 {
+    // Check for NULL values in LHS or RHS
+    if (LHS.d->is_null || RHS.d->is_null)
+    {
+        return false;
+    }
+
+    // Perform comparison if both values are not NULL
+    double lhs = LHS.d->value;
+    double rhs = RHS.d->value;
     switch (op)
     {
     case hsql::kOpEquals:
