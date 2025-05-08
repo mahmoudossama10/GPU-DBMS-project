@@ -478,7 +478,7 @@ std::string CSVProcessor::convertUnionToString(const unionV &value, ColumnType t
     case ColumnType::INTEGER:
         if (value.i->is_null == true)
         {
-            result = std::to_string(0);
+            result = "";
         }
         else
         {
@@ -489,7 +489,7 @@ std::string CSVProcessor::convertUnionToString(const unionV &value, ColumnType t
     case ColumnType::DOUBLE:
         if (value.d->is_null == true)
         {
-            result = std::to_string(0.0);
+            result = "";
         }
         else
         {

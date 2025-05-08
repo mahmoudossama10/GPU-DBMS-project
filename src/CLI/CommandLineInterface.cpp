@@ -209,17 +209,20 @@ void CommandLineInterface::processQuery(const std::string &query)
                     switch (columnTypes.at(colName))
                     {
                     case ColumnType::INTEGER:
-                        std::cout << columnData.at(colName)[rowIdx].i->value;
-                        break;
-
+                    {
+                        auto i = columnData.at(colName)[rowIdx].i;
+                        std::cout << i->is_null ? "" : std::to_string(i->value);
+                    }
+                    break;
                     case ColumnType::STRING:
                         std::cout << *(columnData.at(colName)[rowIdx].s);
                         break;
-
                     case ColumnType::DOUBLE:
-                        std::cout << columnData.at(colName)[rowIdx].d->value;
-                        break;
-
+                    {
+                        auto d = columnData.at(colName)[rowIdx].d;
+                        std::cout << d->is_null ? "" : std::to_string(d->value);
+                    }
+                    break;
                     default:
                         throw std::runtime_error("Unsupported column type");
                     }
@@ -331,7 +334,7 @@ void CommandLineInterface::handleTestCommand()
     // Step 2: Define test queries
     std::vector<std::pair<int, std::string>> testQueries = {
         // ORDER BY
-        // {1, "SELECT * FROM people ORDER BY age ASC"},
+        {1, "SELECT * FROM people ORDER BY age ASC"},
         // {2, "SELECT * FROM people ORDER BY salary DESC"},
         // {3, "SELECT * FROM people ORDER BY name ASC"},
         // {4, "SELECT * FROM people ORDER BY birthday DESC"},
@@ -351,7 +354,7 @@ void CommandLineInterface::handleTestCommand()
         // {15, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
         // JOIN
         // {16, "SELECT p.id, p.name, d.name AS dept_name FROM people p, departments d WHERE p.id = d.id"},
-        {17, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.id = d.id AND p.salary >= 40000"},
+        // {17, "SELECT p.id, p.name, d.name FROM people p, departments d WHERE p.id = d.id AND p.salary >= 40000"},
         // MULTIPLE TABLES
         // {18, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id = d.id AND m.id = 1"},
         // AGGREGATION
