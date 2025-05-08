@@ -250,6 +250,106 @@ private:
     std::shared_ptr<Table> result_;
 };
 
+class EmptyPlan : public ExecutionPlan
+{
+public:
+    EmptyPlan(const hsql::SelectStatement *stmt, std::shared_ptr<StorageManager> storage_manager_)
+        : stmt_(stmt), storage_manager_(storage_manager_) {}
+
+    std::shared_ptr<Table> execute() override
+    {
+
+        std::vector<std::string> headers;
+        bool has_wildcard = false;
+
+        // First pass: collect explicit columns and detect wildcards
+        for (const hsql::Expr *expr : *stmt_->selectList)
+        {
+            if (expr->type == hsql::kExprColumnRef)
+            {
+                std::string col_name = expr->table ? std::string(expr->table) + "." + expr->name : expr->name;
+                headers.push_back(col_name);
+            }
+            else if (expr->type == hsql::kExprStar)
+            {
+                has_wildcard = true;
+                headers.push_back("*"); // Temporary placeholder
+            }
+            else if (expr->alias)
+            {
+                headers.push_back(expr->alias);
+            }
+            else
+            {
+                headers.push_back("expr");
+            }
+        }
+
+        // Handle wildcard expansion if needed
+        if (has_wildcard)
+        {
+            std::vector<std::string> expanded_headers;
+
+            for (const auto &header : headers)
+            {
+                if (header == "*")
+                {
+                    // Wildcard found - expand with all table columns
+                    if (stmt_->fromTable)
+                    {
+                        try
+                        {
+                            Table &table = storage_manager_->getTable(stmt_->fromTable->name);
+                            for (const auto &col : table.getHeaders())
+                            {
+                                expanded_headers.push_back(stmt_->fromTable->name + '.' + col);
+                            }
+                        }
+                        catch (...)
+                        {
+                            throw std::runtime_error("Table not found for wildcard expansion: " +
+                                                     std::string(stmt_->fromTable->name));
+                        }
+                    }
+                    else
+                    {
+                        throw std::runtime_error("No table specified for wildcard expansion");
+                    }
+                }
+                else
+                {
+                    expanded_headers.push_back(header);
+                }
+            }
+            headers = std::move(expanded_headers);
+        }
+
+        // Create empty table structure
+        std::unordered_map<std::string, std::vector<unionV>> empty_data;
+        std::unordered_map<std::string, ColumnType> empty_types;
+
+        for (const auto &header : headers)
+        {
+            empty_data[header] = {};
+        }
+
+        for (const auto &header : headers)
+        {
+            empty_types[header] = ColumnType::STRING; // Default type
+        }
+
+        return std::make_shared<Table>(
+            "empty_result",
+            headers,
+            empty_data,
+            empty_types);
+    }
+
+private:
+    const hsql::SelectStatement *stmt_;
+    std::shared_ptr<StorageManager> storage_manager_;
+};
+
 class TableScanPlan : public ExecutionPlan
 {
 public:
@@ -945,7 +1045,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
         //     std::cout << entry.first << ": " << entry.second << std::endl;
         // }
 
-        plan = buildPassPlane(std::move(children[0]));
+        plan = buildPassPlan(std::move(children[0]));
 
         // // Convert projection expressions
         // std::vector<hsql::Expr *> select_list;
@@ -1057,13 +1157,13 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
     {
         auto *table_join = dynamic_cast<duckdb::LogicalCrossProduct *>(duckdb_plan.get());
 
-        plan = buildCPUJoinPlan(std::move(children), "");
+        plan = buildEmptyPlan(stmt, storage_);
 
         break;
     }
     // Add other operator types as needed
     default:
-        plan = buildPassPlane(std::move(children[0]));
+        plan = buildPassPlan(std::move(children[0]));
 
         // plan = buildProjectPlan(std::move(children[0]), *(stmt->selectList));
 
@@ -1217,10 +1317,16 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildCPUJoinPlan(
 
     return std::make_unique<JoinPlan>(std::move(inputs), where);
 }
-std::unique_ptr<ExecutionPlan> PlanBuilder::buildPassPlane(
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildPassPlan(
     std::unique_ptr<ExecutionPlan> input)
 {
     return std::make_unique<PassPlan>(std::move(input));
+}
+
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildEmptyPlan(
+    const hsql::SelectStatement *stmt, std::shared_ptr<StorageManager> storage_manager_)
+{
+    return std::make_unique<EmptyPlan>(stmt, storage_manager_);
 }
 
 // std::unique_ptr<ExecutionPlan> PlanBuilder::buildAggregatePlan(

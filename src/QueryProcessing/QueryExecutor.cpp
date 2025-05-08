@@ -459,7 +459,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
     const auto *stmtWithoutAgg = static_cast<const hsql::SelectStatement *>(resultWithoutAgg.getStatement(0));
 
     std::shared_ptr<Table> aggResult;
-    if (plan_builder_->hasAggregates(*(stmt->selectList)))
+    if (plan_builder_->hasAggregates(*(stmt->selectList)) && result->getSize() != 0)
     {
         if (PlanBuilder::execution_mode_ == ExecutionMode::CPU)
         {
@@ -471,7 +471,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
         }
     }
 
-    if (stmt->order && !stmt->order->empty())
+    if (stmt->order && !stmt->order->empty() && result->getSize() != 0)
     {
         if (PlanBuilder::execution_mode_ == ExecutionMode::CPU)
         {
@@ -488,7 +488,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
         result = plan_builder_->buildProjectPlan(result, *(stmtWithoutAgg->selectList));
     }
 
-    if (plan_builder_->hasAggregates(*(stmt->selectList)) && plan_builder_->hasOtherSelectNotAggregates(*(stmt->selectList)))
+    if (plan_builder_->hasAggregates(*(stmt->selectList)) && plan_builder_->hasOtherSelectNotAggregates(*(stmt->selectList)) && result->getSize() != 0)
     {
         // Prepare new data structures
         std::unordered_map<std::string, std::vector<unionV>> newColumnData;
@@ -526,7 +526,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
         // Create the new table using the accumulated data
         result = std::make_shared<Table>("final_result_large", newHeaders, newColumnData, newColumnTypes);
     }
-    else if (plan_builder_->hasAggregates(*(stmt->selectList)))
+    else if (plan_builder_->hasAggregates(*(stmt->selectList)) && result->getSize() != 0)
     {
         result = aggResult;
     }
