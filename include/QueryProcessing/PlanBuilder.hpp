@@ -67,6 +67,22 @@ private:
     std::shared_ptr<GPUManager> gpu_manager_;
 };
 
+class GPUFilterPlan : public ExecutionPlan
+{
+public:
+    GPUFilterPlan(std::unique_ptr<ExecutionPlan> input,
+                  std::string where,
+                  std::shared_ptr<GPUManager> gpu_manager);
+
+    std::shared_ptr<Table> execute() override;
+
+private:
+    const hsql::Expr *where_clause_;
+    std::unique_ptr<ExecutionPlan> input_;
+    std::string whereString;
+    std::shared_ptr<GPUManager> gpu_manager_;
+};
+
 class GPUOrderByPlan : public ExecutionPlan
 {
 public:
@@ -156,6 +172,10 @@ public:
     std::shared_ptr<Table> buildGPUAggregatePlan(
         std::shared_ptr<Table> input,
         const std::vector<hsql::Expr *> &select_list);
+
+    std::unique_ptr<ExecutionPlan> buildGPUFilterPlan(
+        std::unique_ptr<ExecutionPlan> input,
+        std::string where);
 
     static std::shared_ptr<Table> output_join_table;
     static int joinPlansCount;

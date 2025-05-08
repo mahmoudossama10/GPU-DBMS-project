@@ -3687,8 +3687,10 @@ std::shared_ptr<Table> GPUManager::executeFilter(
     }
 
     // Process each column
-    for (const auto &[colName, colConditions] : conditionsByColumn)
+    for (const auto &pair : conditionsByColumn) 
     {
+        const auto &colName = pair.first;
+        const auto &colConditions = pair.second;
         ColumnType colType = table->getColumnType(colName);
         cudaStream_t stream;
         CUDA_CHECK(cudaStreamCreate(&stream));

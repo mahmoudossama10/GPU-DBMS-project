@@ -413,6 +413,33 @@ std::shared_ptr<Table> GPUOrderByPlan::execute()
     return gpu_manager_->executeOrderBy(input_, order_exprs_);
 }
 
+GPUFilterPlan::GPUFilterPlan(std::unique_ptr<ExecutionPlan> input,
+                             std::string where,
+                             std::shared_ptr<GPUManager> gpu_manager)
+    : input_(std::move(input)), whereString(where), gpu_manager_(gpu_manager) {}
+
+std::shared_ptr<Table> GPUFilterPlan::execute()
+{
+    auto table = input_->execute();
+
+    std::string sqlStatement = "SELECT * FROM dummy WHERE " + whereString;
+
+    // Parse the SQL statement
+    hsql::SQLParserResult result;
+    hsql::SQLParser::parse(sqlStatement, &result);
+
+    const auto *stmt = result.getStatement(0);
+
+    auto selectStmt = static_cast<const hsql::SelectStatement *>(stmt);
+    // Need to convert DuckDB's filter expression to HSQL
+
+    const hsql::Expr *processed_where = const_cast<hsql::Expr *>(selectStmt->whereClause);
+
+    where_clause_ = processed_where;
+
+    return gpu_manager_->executeFilter(table, where_clause_);
+}
+
 GPUAggregatorPlan::GPUAggregatorPlan(std::shared_ptr<Table> input, const std::vector<hsql::Expr *> &select_list, std::shared_ptr<GPUManager> gpu_manager)
     : input_(input), select_list_(select_list), gpu_manager_(gpu_manager) {}
 
@@ -1013,7 +1040,15 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
 
         if (filters != "")
         {
-            plan = buildFilterPlan(std::move(plan), filters);
+
+            if (execution_mode_ == ExecutionMode::GPU)
+            {
+                plan = buildGPUFilterPlan(std::move(plan), filters);
+            }
+            else
+            {
+                plan = buildFilterPlan(std::move(plan), filters);
+            }
         }
         break;
     }
@@ -1032,7 +1067,14 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(con
             }
         }
 
-        plan = buildFilterPlan(std::move(children[0]), filter_condition_string);
+        if (execution_mode_ == ExecutionMode::GPU)
+        {
+            plan = buildGPUFilterPlan(std::move(children[0]), filter_condition_string);
+        }
+        else
+        {
+            plan = buildFilterPlan(std::move(children[0]), filter_condition_string);
+        }
         break;
     }
     case duckdb::LogicalOperatorType::LOGICAL_PROJECTION:
@@ -1479,6 +1521,22 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUJoinPlan(
     // WHERE clause should already be processed for subqueries by this point
     return std::make_unique<GPUJoinPlan>(std::move(leftTable), std::move(rightTable), where, gpu_manager_);
 }
+
+std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUFilterPlan(
+    std::unique_ptr<ExecutionPlan> input,
+    std::string where)
+{
+    // WHERE clause should already be processed for subqueries by this point
+    return std::make_unique<GPUFilterPlan>(std::move(input), where, gpu_manager_);
+}
+
+// std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUFilterPlan(
+//     std::unique_ptr<ExecutionPlan> input,
+//     std::string where)
+// {
+//     // WHERE clause should already be processed for subqueries by this point
+//     return std::make_unique<GPUJoinPlan>(std::move(leftTable), std::move(rightTable), where, gpu_manager_);
+// }
 
 std::unique_ptr<ExecutionPlan> PlanBuilder::buildGPUJoinPlanMultipleTable(
     std::vector<std::unique_ptr<ExecutionPlan>> tables,
