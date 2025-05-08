@@ -307,7 +307,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const std::string &query)
 
         std::string outputPath = storage_->inputDirectory + "sub_query.csv";
         CSVProcessor::saveCSV(outputPath, resultTable->getHeaders(), resultTable->getData(), resultTable->getColumnTypes()); // CSVProcessor needs to be updated too
-        std::cout << "Saved output to '" << outputPath << "'\n";
+        // std::cout << "Saved output to '" << outputPath << "'\n";
 
         cleanupBatchTables();
         return execute(static_cast<const hsql::SelectStatement *>(stmt2), subQuery.modified_query);
@@ -394,7 +394,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
         for (size_t batchIdx = 0; batchIdx < numBatches; batchIdx++)
         {
             std::string batchTableName = allTableNames[i] + "_batch0_" + std::to_string(batchIdx);
-            std::cout << batchTableName << '\n';
+            // std::cout << batchTableName << '\n';
             // Skip if this batch already exists
             if (storage_->tableExists(batchTableName))
             {
@@ -540,9 +540,7 @@ std::shared_ptr<Table> QueryExecutor::execute(const hsql::SelectStatement *stmt,
 // Helper function to copy union values based on type (similar to the one in your Table class)
 unionV QueryExecutor::copyUnionValue(const unionV &value, ColumnType type)
 {
-    unionV copy = {};
-    copy.i = new TheInteger();
-    copy.d = new TheDouble();
+    unionV copy;
 
     switch (type)
     {
@@ -550,12 +548,10 @@ unionV QueryExecutor::copyUnionValue(const unionV &value, ColumnType type)
         copy.s = (value.s != nullptr) ? new std::string(*value.s) : nullptr;
         break;
     case ColumnType::INTEGER:
-        copy.i->value = value.i->value;
-        copy.i->is_null = value.i->is_null;
+        copy.i = value.i;
         break;
     case ColumnType::DOUBLE:
-        copy.d->value = value.d->value;
-        copy.d->is_null = value.d->is_null;
+        copy.d = value.d;
         break;
     case ColumnType::DATETIME:
         if (value.t != nullptr)
@@ -663,7 +659,7 @@ std::shared_ptr<Table> QueryExecutor::processBatchedQuery(const hsql::SelectStat
         int index = 1;
         for (const auto &combination : batchCombinations)
         {
-            std::cout << "batch " << index << '\n';
+            std::cout << "batch " << index << " from " << batchCombinations.size() << '\n';
             index++;
             // Create a query for this batch combination
             std::string batchQuery = query;

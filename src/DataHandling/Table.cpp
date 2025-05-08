@@ -19,20 +19,6 @@ Table::Table(const std::string &name,
         {
             throw std::invalid_argument("Column headers and column types count mismatch");
         }
-
-        size_t expectedSize = columnData.at(headers[0]).size();
-        for (const auto &header : headers)
-        {
-            auto it = columnData.find(header);
-            if (it == columnData.end())
-            {
-                throw std::invalid_argument("Column missing from data: " + header);
-            }
-            if (it->second.size() != expectedSize)
-            {
-                throw std::invalid_argument("Column size mismatch for: " + header);
-            }
-        }
     }
 }
 

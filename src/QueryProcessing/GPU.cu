@@ -1032,10 +1032,27 @@ void GPUManager::evaluateConditionOnBatch(
             int leftBatchSize = leftTable->getSize();
             int rightBatchSize = rightTable->getSize();
 
+
             // Get integer column data directly from the Table class
             // (using the cached int columns from the Table implementation)
-            const auto &leftColumnData = leftTable->getData().at(leftColName);
-            const auto &rightColumnData = rightTable->getData().at(rightColName);
+            std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
+            size_t n = leftColumnDataUnion.size();
+            int64_t* leftColumnData = new int64_t[n];
+
+            for (size_t i = 0; i < n; ++i) {
+                const unionV& val = leftColumnDataUnion[i];
+                leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            }
+
+
+            std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
+            n = rightColumnDataUnion.size();
+            int64_t* rightColumnData = new int64_t[n];
+
+            for (size_t i = 0; i < n; ++i) {
+                const unionV& val = rightColumnDataUnion[i];
+                    rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            }
 
             // Stream for asynchronous operations
             cudaStream_t stream;
@@ -1058,8 +1075,8 @@ void GPUManager::evaluateConditionOnBatch(
             cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
 
             // Async memory transfers
-            cudaMemcpyAsync(d_leftCol, leftColumnData.data(), leftBatchSize * sizeof(int64_t), cudaMemcpyHostToDevice, stream);
-            cudaMemcpyAsync(d_rightCol, rightColumnData.data(), rightBatchSize * sizeof(int64_t), cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_leftCol, leftColumnData, leftBatchSize * sizeof(int64_t), cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_rightCol, rightColumnData, rightBatchSize * sizeof(int64_t), cudaMemcpyHostToDevice, stream);
             cudaMemcpyAsync(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice, stream);
 
             // Calculate threads needed
@@ -1107,8 +1124,24 @@ void GPUManager::evaluateConditionOnBatch(
             int rightBatchSize = rightTable->getSize();
 
             // Get double column data directly from the Table class
-            const auto &leftColumnData = leftTable->getData().at(leftColName);
-            const auto &rightColumnData = rightTable->getData().at(rightColName);
+            std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
+            size_t n = leftColumnDataUnion.size();
+            int64_t* leftColumnData = new int64_t[n];
+
+            for (size_t i = 0; i < n; ++i) {
+                const unionV& val = leftColumnDataUnion[i];
+                leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            }
+
+
+            std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
+            n = rightColumnDataUnion.size();
+            int64_t* rightColumnData = new int64_t[n];
+
+            for (size_t i = 0; i < n; ++i) {
+                const unionV& val = rightColumnDataUnion[i];
+                    rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+            }
 
             // Stream for asynchronous operations
             cudaStream_t stream;
@@ -1131,8 +1164,8 @@ void GPUManager::evaluateConditionOnBatch(
             cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int));
 
             // Async memory transfers
-            cudaMemcpyAsync(d_leftCol, leftColumnData.data(), leftBatchSize * sizeof(double), cudaMemcpyHostToDevice, stream);
-            cudaMemcpyAsync(d_rightCol, rightColumnData.data(), rightBatchSize * sizeof(double), cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_leftCol, leftColumnData, leftBatchSize * sizeof(double), cudaMemcpyHostToDevice, stream);
+            cudaMemcpyAsync(d_rightCol, rightColumnData, rightBatchSize * sizeof(double), cudaMemcpyHostToDevice, stream);
             cudaMemcpyAsync(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice, stream);
 
             // Calculate threads needed
@@ -1776,9 +1809,29 @@ void GPUManager::evaluateTwoTableJoinCondition(
             throw std::runtime_error("Unsupported operator type");
         }
 
-        // Get integer column data directly (column-major format)
-        const auto &leftColumnData = leftTable->getData().at(leftColName);
-        const auto &rightColumnData = rightTable->getData().at(rightColName);
+        // // Get integer column data directly (column-major format)
+        // const auto &leftColumnData = leftTable->getData().at(leftColName);
+        // const auto &rightColumnData = rightTable->getData().at(rightColName);
+
+
+        std::vector<unionV> leftColumnDataUnion = leftTable->getData().at(leftColName);
+        size_t n = leftColumnDataUnion.size();
+        int64_t* leftColumnData = new int64_t[n];
+
+        for (size_t i = 0; i < n; ++i) {
+            const unionV& val = leftColumnDataUnion[i];
+            leftColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+        }
+
+
+        std::vector<unionV> rightColumnDataUnion = rightTable->getData().at(rightColName);
+        n = rightColumnDataUnion.size();
+        int64_t* rightColumnData = new int64_t[n];
+
+        for (size_t i = 0; i < n; ++i) {
+            const unionV& val = rightColumnDataUnion[i];
+                rightColumnData[i] = static_cast<int64_t>(val.i->value);  // assuming TheInteger has a field `value`
+        }
 
         // Verify column types are integers (current implementation only handles integers)
         if (leftTable->getColumnType(leftColName) == ColumnType::INTEGER &&
@@ -1795,8 +1848,8 @@ void GPUManager::evaluateTwoTableJoinCondition(
             cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int)); // Add this line
 
             // Copy data to GPU
-            cudaMemcpy(d_leftColumn, leftColumnData.data(), leftSize * sizeof(int64_t), cudaMemcpyHostToDevice);
-            cudaMemcpy(d_rightColumn, rightColumnData.data(), rightSize * sizeof(int64_t), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_leftColumn, leftColumnData, leftSize * sizeof(int64_t), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_rightColumn, rightColumnData, rightSize * sizeof(int64_t), cudaMemcpyHostToDevice);
             cudaMemcpy(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice); // Add this line
 
             // Calculate grid and block dimensions
@@ -1844,8 +1897,8 @@ void GPUManager::evaluateTwoTableJoinCondition(
             cudaMalloc(&d_tableSizes, tableSizes.size() * sizeof(int)); // Add this line
 
             // Copy data to GPU
-            cudaMemcpy(d_leftColumn, leftColumnData.data(), leftSize * sizeof(double), cudaMemcpyHostToDevice);
-            cudaMemcpy(d_rightColumn, rightColumnData.data(), rightSize * sizeof(double), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_leftColumn, leftColumnData, leftSize * sizeof(double), cudaMemcpyHostToDevice);
+            cudaMemcpy(d_rightColumn, rightColumnData, rightSize * sizeof(double), cudaMemcpyHostToDevice);
             cudaMemcpy(d_tableSizes, tableSizes.data(), tableSizes.size() * sizeof(int), cudaMemcpyHostToDevice); // Add this line
 
             // Calculate grid and block dimensions
@@ -1894,13 +1947,13 @@ void GPUManager::evaluateTwoTableJoinCondition(
                 for (int i = 0; i < leftSize; i++)
                 {
                     leftOffsets[i] = leftTotalSize;
-                    leftTotalSize += leftColumnData[i].s->length() + 1; // +1 for null terminator
+                    leftTotalSize += leftColumnDataUnion[i].s->length() + 1; // +1 for null terminator
                 }
 
                 for (int j = 0; j < rightSize; j++)
                 {
                     rightOffsets[j] = rightTotalSize;
-                    rightTotalSize += rightColumnData[j].s->length() + 1; // +1 for null terminator
+                    rightTotalSize += rightColumnDataUnion[j].s->length() + 1; // +1 for null terminator
                 }
 
                 // Create flattened host buffers for string data
@@ -1910,13 +1963,13 @@ void GPUManager::evaluateTwoTableJoinCondition(
                 // Copy string data to flattened buffers
                 for (int i = 0; i < leftSize; i++)
                 {
-                    const std::string &str = *(leftColumnData[i].s);
+                    const std::string &str = *(leftColumnDataUnion[i].s);
                     std::memcpy(&leftStringData[leftOffsets[i]], str.c_str(), str.length() + 1);
                 }
 
                 for (int j = 0; j < rightSize; j++)
                 {
-                    const std::string &str = *(rightColumnData[j].s);
+                    const std::string &str = *(rightColumnDataUnion[j].s);
                     std::memcpy(&rightStringData[rightOffsets[j]], str.c_str(), str.length() + 1);
                 }
 
@@ -2129,6 +2182,7 @@ std::shared_ptr<Table> GPUManager::executeTwoTableJoinWithBinarySearch(
             }
 
             // Populate result table using the matching indices
+
             for (int resultIdx = 0; resultIdx < match_indecies.size(); resultIdx++)
             {
                 int leftIdx = match_indecies[resultIdx] / rightSize;
