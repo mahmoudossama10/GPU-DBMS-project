@@ -331,21 +331,21 @@ void CommandLineInterface::handleTestCommand()
     // Step 2: Define test queries
     std::vector<std::pair<int, std::string>> testQueries = {
         // ORDER BY
-        // {1, "SELECT * FROM people ORDER BY age ASC"},
-        // {2, "SELECT * FROM people ORDER BY salary DESC"},
-        // {3, "SELECT * FROM people ORDER BY name ASC"},
-        // {4, "SELECT * FROM people ORDER BY birthday DESC"},
+        {1, "SELECT * FROM people ORDER BY age ASC"},
+        {2, "SELECT * FROM people ORDER BY salary DESC"},
+        {3, "SELECT * FROM people ORDER BY name ASC"},
+        {4, "SELECT * FROM people ORDER BY birthday DESC"},
         // FILTERING
-        // {5, "SELECT * FROM people WHERE age > 30"},
-        // {6, "SELECT * FROM people WHERE salary >= 60000"},
-        // {7, "SELECT * FROM people WHERE name != 'Osama'"},
-        // {8, "SELECT * FROM people WHERE birthday < '2000-01-01'"},
-        // {9, "SELECT * FROM people WHERE status = 'active'"},
+        {5, "SELECT * FROM people WHERE age > 30"},
+        {6, "SELECT * FROM people WHERE salary >= 60000"},
+        {7, "SELECT * FROM people WHERE name != 'Osama'"},
+        {8, "SELECT * FROM people WHERE birthday < '2000-01-01'"},
+        {9, "SELECT * FROM people WHERE status = 'active'"},
         // FILTERING WITH AND / OR
-        // {10, "SELECT * FROM people WHERE age > 30 AND salary >= 50000"},
-        // {11, "SELECT * FROM people WHERE status = 'active' OR birthday > '1990-01-01'"},
-        // {12, "SELECT * FROM people WHERE name = 'Ahmed' AND age <= 40 AND salary > 45000"},
-        // {13, "SELECT * FROM people WHERE name = 'Sara' OR (age > 35 AND salary < 70000)"},
+        {10, "SELECT * FROM people WHERE age > 30 AND salary >= 50000"},
+        {11, "SELECT * FROM people WHERE status = 'active' OR birthday > '1990-01-01'"},
+        {12, "SELECT * FROM people WHERE name = 'Ahmed' AND age <= 40 AND salary > 45000"},
+        {13, "SELECT * FROM people WHERE name = 'Sara' OR (age > 35 AND salary < 70000)"},
         // NESTED QUERIES
         // {14, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
         // {15, "SELECT * FROM people WHERE age = (SELECT MAX(age) FROM people)"},
@@ -356,11 +356,14 @@ void CommandLineInterface::handleTestCommand()
         // {18, "SELECT p.name, d.name AS dept, m.name AS manager FROM people p, departments d, people m WHERE p.id = d.id AND m.id = 1"},
         // AGGREGATION
         // {19, "SELECT COUNT(*) AS total_people FROM people"},
-        {20, "SELECT AVG(salary) AS avg_salary FROM people"},
+        // {20, "SELECT AVG(salary) AS avg_salary FROM people"},
         // {21, "SELECT MAX(age) AS max_age FROM people"},
         // {22, "SELECT MIN(birthday) AS earliest_birthday FROM people"},
+        // {23, "SELECT MIN(age) AS min_age FROM people"},
+        // {24, "SELECT MIN(salary) AS min_salary FROM people"},
+        // {25, "SELECT MAX(salary) AS max_salary FROM people"},
         // PROJECTION
-        // {23, "SELECT name, salary FROM people"}
+        // {26, "SELECT name, salary FROM people"}
     };
 
     // Step 3: Execute each query and verify against test cases
@@ -683,7 +686,7 @@ public:
                                     double val2 = norm2.empty() ? 0.0 : std::stod(norm2);
 
                                     // Consider them equal if they're very close
-                                    if (std::abs(val1 - val2) < 0.01)
+                                    if (std::abs(val1 - val2) <= 0.01)
                                     {
                                         continue;
                                     }

@@ -2786,12 +2786,16 @@ __global__ void sumKernelInt(const int64_t *data, size_t num_rows, int64_t *resu
 // CUDA kernel for MIN/MAX operation (for double)
 __global__ void minMaxKernelDouble(const double *data, size_t num_rows, double *result, bool is_min)
 {
-    // Declare shared memory correctly
+    // Declare shared memory for block-level reduction
     __shared__ double shared_val[THREADS_PER_BLOCK];
 
     int tid = threadIdx.x;
-    shared_val[tid] = is_min ? 1.0e308 : -1.0e308; // Replacement for DBL_MAX and -DBL_MAX
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Initialize with appropriate extreme values
+    shared_val[tid] = is_min ? 1.0e308 : -1.0e308;
+
+    // Load data into shared memory
     if (idx < num_rows)
     {
         shared_val[tid] = data[idx];
@@ -2805,42 +2809,64 @@ __global__ void minMaxKernelDouble(const double *data, size_t num_rows, double *
         {
             if (is_min)
             {
-                shared_val[tid] = (shared_val[tid] < shared_val[tid + s]) ? shared_val[tid] : shared_val[tid + s];
+                shared_val[tid] = fmin(shared_val[tid], shared_val[tid + s]);
             }
             else
             {
-                shared_val[tid] = (shared_val[tid] > shared_val[tid + s]) ? shared_val[tid] : shared_val[tid + s];
+                shared_val[tid] = fmax(shared_val[tid], shared_val[tid + s]);
             }
         }
         __syncthreads();
     }
 
+    // Only the first thread in each block updates the global result
     if (tid == 0)
     {
-        // Simple update for double as atomicMin/Max isn't widely supported for double
-        double current = *result;
-        if (is_min)
+        // Atomic update for double values using atomicCAS pattern
+        unsigned long long int *result_as_ull = (unsigned long long int *)result;
+        unsigned long long int old_val, assumed;
+        unsigned long long int val_as_ull = __double_as_longlong(shared_val[0]);
+
+        assumed = *result_as_ull;
+        do
         {
-            if (shared_val[0] < current)
-                *result = shared_val[0];
-        }
-        else
-        {
-            if (shared_val[0] > current)
-                *result = shared_val[0];
-        }
+            old_val = assumed;
+            double current = __longlong_as_double(old_val);
+            double new_val;
+
+            if (is_min)
+            {
+                new_val = fmin(current, shared_val[0]);
+            }
+            else
+            {
+                new_val = fmax(current, shared_val[0]);
+            }
+
+            if (new_val == current)
+            {
+                break; // No need to update
+            }
+
+            unsigned long long int new_val_as_ull = __double_as_longlong(new_val);
+            assumed = atomicCAS(result_as_ull, old_val, new_val_as_ull);
+        } while (assumed != old_val);
     }
 }
 
 // CUDA kernel for MIN/MAX operation (for int)
 __global__ void minMaxKernelInt(const int64_t *data, size_t num_rows, int64_t *result, bool is_min)
 {
-    // Declare shared memory correctly
+    // Declare shared memory for block-level reduction
     __shared__ int64_t shared_val[THREADS_PER_BLOCK];
 
     int tid = threadIdx.x;
-    shared_val[tid] = is_min ? LLONG_MAX : LLONG_MIN;
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Initialize with appropriate extreme values
+    shared_val[tid] = is_min ? INT64_MAX : INT64_MIN;
+
+    // Load data into shared memory
     if (idx < num_rows)
     {
         shared_val[tid] = data[idx];
@@ -2854,60 +2880,45 @@ __global__ void minMaxKernelInt(const int64_t *data, size_t num_rows, int64_t *r
         {
             if (is_min)
             {
-                shared_val[tid] = (shared_val[tid] < shared_val[tid + s]) ? shared_val[tid] : shared_val[tid + s];
+                shared_val[tid] = min(shared_val[tid], shared_val[tid + s]);
             }
             else
             {
-                shared_val[tid] = (shared_val[tid] > shared_val[tid + s]) ? shared_val[tid] : shared_val[tid + s];
+                shared_val[tid] = max(shared_val[tid], shared_val[tid + s]);
             }
         }
         __syncthreads();
     }
 
+    // Only the first thread in each block updates the global result
     if (tid == 0)
     {
-// Use custom atomic operations for int64_t
-#if __CUDA_ARCH__ >= 350
-        // For compute capability >= 3.5, we can use atomic operations on 64-bit integers
-        if (is_min)
+        // Use atomicCAS for 64-bit integers
+        int64_t old_val, assumed;
+        assumed = *result;
+        do
         {
-            // Custom implementation for atomicMin with int64_t
-            unsigned long long int old = *reinterpret_cast<unsigned long long int *>(result);
-            unsigned long long int assumed;
-            unsigned long long int val = static_cast<unsigned long long int>(shared_val[0]);
-            do
+            old_val = assumed;
+            int64_t new_val;
+
+            if (is_min)
             {
-                assumed = old;
-                old = atomicCAS(reinterpret_cast<unsigned long long int *>(result),
-                                assumed,
-                                min(val, assumed));
-            } while (assumed != old);
-        }
-        else
-        {
-            // Custom implementation for atomicMax with int64_t
-            unsigned long long int old = *reinterpret_cast<unsigned long long int *>(result);
-            unsigned long long int assumed;
-            unsigned long long int val = static_cast<unsigned long long int>(shared_val[0]);
-            do
+                new_val = min(old_val, shared_val[0]);
+            }
+            else
             {
-                assumed = old;
-                old = atomicCAS(reinterpret_cast<unsigned long long int *>(result),
-                                assumed,
-                                max(val, assumed));
-            } while (assumed != old);
-        }
-#else
-        // Fallback for older architectures
-        if (is_min)
-        {
-            *result = min(*result, shared_val[0]);
-        }
-        else
-        {
-            *result = max(*result, shared_val[0]);
-        }
-#endif
+                new_val = max(old_val, shared_val[0]);
+            }
+
+            if (new_val == old_val)
+            {
+                break; // No need to update
+            }
+
+            assumed = atomicCAS((unsigned long long *)result,
+                                (unsigned long long)old_val,
+                                (unsigned long long)new_val);
+        } while (assumed != old_val);
     }
 }
 
@@ -3164,7 +3175,7 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
                             h_data[i] = 0.0;
                         }
                     }
-                    double h_result = is_min ? 1.0e308 : -1.0e308;
+                    double h_result = is_min ? INT64_MAX : INT64_MIN;
                     double *d_data = nullptr;
                     double *d_result = nullptr;
                     CUDA_CHECK(cudaMalloc(&d_data, num_rows * sizeof(double)));

@@ -36,10 +36,19 @@ namespace
 
     std::string insertAndBetweenConditions(const std::string &input)
     {
-        // Regex to match expressions like: var = value, var >= value, etc.
-        std::regex cond_regex(R"(\s*[\w\.]+\s*(=|<|>|<=|>=|!=)\s*[\w\.']+\s*)");
+        // First, remove "::TIMESTAMP" if found
+        std::string processed_input = input;
+        size_t timestamp_pos;
+        while ((timestamp_pos = processed_input.find("::TIMESTAMP")) != std::string::npos)
+        {
+            processed_input.erase(timestamp_pos, 11); // "::TIMESTAMP" is 11 characters
+        }
 
-        std::sregex_iterator begin(input.begin(), input.end(), cond_regex);
+        // Regex to match expressions like: var = value, var >= value, etc.
+        // But avoid matching date-time formats: yyyy-mm-dd hh:mm:ss
+        std::regex cond_regex(R"((\s*[\w\.]+\s*(=|<|>|<=|>=|!=)\s*(?:(?!\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})[\w\.']+|\'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\')\s*))");
+
+        std::sregex_iterator begin(processed_input.begin(), processed_input.end(), cond_regex);
         std::sregex_iterator end;
 
         std::ostringstream output;
@@ -52,7 +61,7 @@ namespace
             size_t match_end = match_start + match.length();
 
             // Append anything before the match
-            output << input.substr(last_pos, match_start - last_pos);
+            output << processed_input.substr(last_pos, match_start - last_pos);
 
             // Append the condition
             output << match.str();
@@ -64,7 +73,7 @@ namespace
             ++next_it;
             if (next_it != end)
             {
-                std::string in_between = input.substr(last_pos, next_it->position() - last_pos);
+                std::string in_between = processed_input.substr(last_pos, next_it->position() - last_pos);
                 if (in_between.find("AND") == std::string::npos && in_between.find("OR") == std::string::npos)
                 {
                     output << " AND ";
@@ -78,7 +87,7 @@ namespace
         }
 
         // Append remaining part of string
-        output << input.substr(last_pos);
+        output << processed_input.substr(last_pos);
         return output.str();
     }
 
