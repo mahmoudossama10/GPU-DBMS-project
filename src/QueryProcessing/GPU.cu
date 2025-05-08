@@ -3226,7 +3226,14 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
                         }
                         catch (std::runtime_error)
                         {
-                            h_data[i] = 0.0;
+                            if (is_min)
+                            {
+                                h_data[i] = INT64_MAX;
+                            }
+                            else
+                            {
+                                h_data[i] = INT64_MIN;
+                            }
                         }
                     }
                     double h_result = is_min ? INT64_MAX : INT64_MIN;
