@@ -89,7 +89,8 @@
         "locale": "cpp",
         "__bit_reference": "cpp",
         "__functional_base": "cpp",
-        "__string": "cpp"
+        "__string": "cpp",
+        "climits": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

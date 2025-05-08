@@ -2928,7 +2928,19 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
     {
         result_headers.push_back(op.alias);
         ColumnType col_type = table.getColumnType(op.column_name);
-        result_types[op.alias] = (op.function_name == "count") ? ColumnType::INTEGER : col_type;
+        // result_types[op.alias] = (op.function_name == "count") ? ColumnType::INTEGER : col_type;
+        if (op.function_name == "count")
+        {
+            result_types[op.alias] = ColumnType::INTEGER;
+        }
+        else if (op.function_name == "avg")
+        {
+            result_types[op.alias] = ColumnType::DOUBLE;
+        }
+        else
+        {
+            result_types[op.alias] = col_type;
+        }
         std::vector<unionV> result_col(1); // Aggregates produce a single row
         result_col[0].i = new TheInteger();
         result_col[0].d = new TheDouble();
@@ -3015,6 +3027,7 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
             }
             else if (op.function_name == "sum" || op.function_name == "avg")
             {
+                int64_t number_of_nulls = 0;
                 if (col_type == ColumnType::INTEGER)
                 {
                     std::vector<int64_t> h_data(num_rows);
@@ -3027,6 +3040,7 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
                         catch (std::runtime_error)
                         {
                             h_data[i] = 0;
+                            number_of_nulls++;
                         }
                     }
                     int64_t h_result = 0;
@@ -3047,7 +3061,7 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
 
                     if (op.function_name == "avg")
                     {
-                        result_col[0].d->value = static_cast<double>(h_result) / num_rows;
+                        result_col[0].d->value = static_cast<double>(h_result) / (num_rows - number_of_nulls);
                     }
                     else
                     {
@@ -3063,9 +3077,10 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
                         {
                             h_data[i] = (col_type == ColumnType::DOUBLE) ? table.getDouble(op.column_name, i) : 0.0;
                         }
-                        catch (std::runtime_error)
+                        catch (...)
                         {
                             h_data[i] = 0.0;
+                            number_of_nulls++;
                         }
                     }
                     double h_result = 0.0;
@@ -3086,7 +3101,7 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
 
                     if (op.function_name == "avg")
                     {
-                        result_col[0].d->value = h_result / num_rows;
+                        result_col[0].d->value = h_result / (num_rows - number_of_nulls);
                     }
                     else
                     {
@@ -3106,9 +3121,16 @@ std::shared_ptr<Table> GPUManager::aggregateTableGPU(
                         {
                             h_data[i] = table.getInteger(op.column_name, i);
                         }
-                        catch (std::runtime_error)
+                        catch (...)
                         {
-                            h_data[i] = 0;
+                            if (is_min)
+                            {
+                                h_data[i] = INT64_MAX;
+                            }
+                            else
+                            {
+                                h_data[i] = INT64_MIN;
+                            }
                         }
                     }
                     int64_t h_result = is_min ? LLONG_MAX : LLONG_MIN;
