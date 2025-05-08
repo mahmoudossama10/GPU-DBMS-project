@@ -128,7 +128,7 @@ std::shared_ptr<Table> Join::apply(
     size_t processedCount = 0;
     const size_t reportInterval = std::max<size_t>(1, totalCombinations / 10);
 
-    while (true)
+    while (true && estimatedSize != 0)
     {
         // Evaluate the join condition for the current combination
         if (!condition || evaluateJoinCondition(tables, currentIndices, condition))
