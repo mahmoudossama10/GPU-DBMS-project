@@ -334,7 +334,7 @@ void CommandLineInterface::handleTestCommand()
     // Step 2: Define test queries
     std::vector<std::pair<int, std::string>> testQueries = {
         // ORDER BY
-        {1, "SELECT * FROM people ORDER BY age ASC"},
+        // {1, "SELECT * FROM people ORDER BY age ASC"},
         // {2, "SELECT * FROM people ORDER BY salary DESC"},
         // {3, "SELECT * FROM people ORDER BY name ASC"},
         // {4, "SELECT * FROM people ORDER BY birthday DESC"},
@@ -345,9 +345,9 @@ void CommandLineInterface::handleTestCommand()
         // {8, "SELECT * FROM people WHERE birthday < '2000-01-01'"},
         // {9, "SELECT * FROM people WHERE status = 'active'"},
         // FILTERING WITH AND / OR
-        // {10, "SELECT * FROM people WHERE age > 30 AND salary >= 50000"},
-        // {11, "SELECT * FROM people WHERE status = 'active' OR birthday > '1990-01-01'"},
-        // {12, "SELECT * FROM people WHERE name = 'Ahmed' AND age <= 40 AND salary > 45000"},
+        {10, "SELECT * FROM people WHERE age > 30 AND salary >= 50000"},
+        {11, "SELECT * FROM people WHERE status = 'active' OR birthday > '1990-01-01'"},
+        {12, "SELECT * FROM people WHERE name = 'Ahmed' AND age <= 40 AND salary > 45000"},
         // {13, "SELECT * FROM people WHERE name = 'Sara' OR (age > 35 AND salary < 70000)"},
         // NESTED QUERIES
         // {14, "SELECT * FROM people WHERE salary > (SELECT AVG(salary) FROM people)"},
