@@ -207,6 +207,10 @@ private:
         std::vector<std::unique_ptr<ExecutionPlan>> tables,
         std::string where);
 
-    std::unique_ptr<ExecutionPlan> buildPassPlane(
+    std::unique_ptr<ExecutionPlan> buildPassPlan(
         std::unique_ptr<ExecutionPlan> input);
+
+    std::unique_ptr<ExecutionPlan> buildEmptyPlan(
+        const hsql::SelectStatement *stmt,
+        std::shared_ptr<StorageManager> storage_manager_);
 };

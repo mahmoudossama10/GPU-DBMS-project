@@ -21,6 +21,7 @@ Table::Table(const std::string &name,
         }
 
         size_t expectedSize = columnData.at(headers[0]).size();
+
         for (const auto &header : headers)
         {
             auto it = columnData.find(header);

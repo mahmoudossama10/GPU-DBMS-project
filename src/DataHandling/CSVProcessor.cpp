@@ -8,7 +8,6 @@
 #include <sys/stat.h>
 #include <omp.h>
 
-
 // Default constructor
 CSVProcessor::CSVProcessor()
 {
@@ -17,46 +16,47 @@ CSVProcessor::CSVProcessor()
 
 // Ensure you have a matching inferTypes function adapted from your friend's approach
 
-std::vector<ColumnType> CSVProcessor::inferTypes(const std::string& row) {
+std::vector<ColumnType> CSVProcessor::inferTypes(const std::string &row)
+{
 
     std::vector<ColumnType> types;
 
     auto fields = parseCSVLine(row);
 
+    for (const auto &field : fields)
+    {
 
-    for (const auto& field: fields) {
-
-        try {
+        try
+        {
 
             auto int_val = std::stoll(field);
 
             types.push_back(ColumnType::INTEGER);
 
             continue;
+        }
+        catch (...)
+        {
+        }
 
-        } catch (...) {}
-
-
-        try {
+        try
+        {
 
             auto double_val = std::stod(field);
 
             types.push_back(ColumnType::DOUBLE);
 
             continue;
-
-        } catch (...) {}
-
+        }
+        catch (...)
+        {
+        }
 
         types.push_back(ColumnType::STRING);
-
     }
 
-
     return types;
-
 }
-
 
 CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
 {
@@ -171,9 +171,9 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
             bool canBeDouble = true;
             bool canBeBool = true;
 
-            for (const auto& row : sampleRows)
+            for (const auto &row : sampleRows)
             {
-                const std::string& value = row[col];
+                const std::string &value = row[col];
                 if (value.empty())
                     continue;
 
@@ -182,7 +182,8 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
                 {
                     std::string valueLower = value;
                     std::transform(valueLower.begin(), valueLower.end(), valueLower.begin(),
-                                   [](unsigned char c) { return std::tolower(c); });
+                                   [](unsigned char c)
+                                   { return std::tolower(c); });
                     if (valueLower != "true" && valueLower != "false" &&
                         valueLower != "1" && valueLower != "0" &&
                         valueLower != "yes" && valueLower != "no" &&
@@ -301,7 +302,7 @@ CSVProcessor::CSVData CSVProcessor::loadCSV(const std::string &filepath)
     for (size_t col = 0; col < headers.size(); ++col)
     {
         columnData[headers[col]] = std::move(tempData[col]); // Use cleaned header
-        columnTypeMap[headers[col]] = types[col];           // Use cleaned header
+        columnTypeMap[headers[col]] = types[col];            // Use cleaned header
     }
 
     return {headers, columnData, columnTypeMap}; // Return cleaned headers for immediate query use
@@ -315,13 +316,11 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
 
     bool inQuotes = false;
 
-
     for (size_t i = 0; i < line.length(); ++i)
 
     {
 
         char c = line[i];
-
 
         if (inQuotes)
 
@@ -338,7 +337,6 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
                     field += '"'; // Escaped quote
 
                     ++i;
-
                 }
 
                 else
@@ -346,9 +344,7 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
                 {
 
                     inQuotes = false; // End of quoted field
-
                 }
-
             }
 
             else
@@ -356,9 +352,7 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
             {
 
                 field += c;
-
             }
-
         }
 
         else
@@ -370,7 +364,6 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
             {
 
                 inQuotes = true;
-
             }
 
             else if (c == ',')
@@ -380,7 +373,6 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
                 result.push_back(field);
 
                 field.clear();
-
             }
 
             else
@@ -388,11 +380,8 @@ std::vector<std::string> CSVProcessor::parseCSVLine(const std::string &line)
             {
 
                 field += c;
-
             }
-
         }
-
     }
 
     result.push_back(field); // Add the last field
@@ -506,7 +495,6 @@ dateTime *CSVProcessor::parseDateTime(const std::string &datetime)
 {
     dateTime *dt = new dateTime();
 
-
     // Initialize with defaults
 
     dt->year = 1970;
@@ -521,7 +509,6 @@ dateTime *CSVProcessor::parseDateTime(const std::string &datetime)
 
     dt->second = 0;
 
-
     // Simplified regex pattern without non-capturing groups for broader compatibility
 
     std::regex datetime_pattern(
@@ -530,10 +517,10 @@ dateTime *CSVProcessor::parseDateTime(const std::string &datetime)
 
         std::regex::extended);
 
-
     std::smatch matches;
 
-    try {
+    try
+    {
 
         if (std::regex_match(datetime, matches, datetime_pattern))
 
@@ -572,7 +559,6 @@ dateTime *CSVProcessor::parseDateTime(const std::string &datetime)
                     if (!token.empty())
 
                         timeVals.push_back(std::stoi(token));
-
                 }
 
                 if (timeVals.size() >= 1)
@@ -586,21 +572,17 @@ dateTime *CSVProcessor::parseDateTime(const std::string &datetime)
                 if (timeVals.size() >= 3)
 
                     dt->second = static_cast<unsigned char>(timeVals[2]);
-
             }
-
         }
-
     }
 
-    catch (const std::exception& e) {
+    catch (const std::exception &e)
+    {
 
         std::cerr << "Regex error in parseDateTime for input '" << datetime << "': " << e.what() << std::endl;
 
         // Fallback to default values or alternative parsing if needed
-
     }
-
 
     return dt;
 }
