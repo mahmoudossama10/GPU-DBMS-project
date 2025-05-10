@@ -691,7 +691,7 @@ std::shared_ptr<Table> GPUManager::executeMultipleTableJoin(
 
     // Base case: processed all tables in this batch combination
     // Process this specific batch combination
-    auto startProcess = std::chrono::high_resolution_clock::now();
+    // auto startProcess = std::chrono::high_resolution_clock::now();
     int64_t totalBatchSize = 1;
     for (const auto &table : tables)
     {
@@ -732,11 +732,11 @@ std::shared_ptr<Table> GPUManager::executeMultipleTableJoin(
 
     std::vector<int64_t> match_indecies = iterator(h_result, totalBatchSize);
 
-    auto endProcess = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> processTime = endProcess - startProcess;
-    std::cout << "processBatch time: " << processTime.count() << " ms" << std::endl;
+    // auto endProcess = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double, std::milli> processTime = endProcess - startProcess;
+    // std::cout << "processBatch time: " << processTime.count() << " ms" << std::endl;
 
-    auto startFilter = std::chrono::high_resolution_clock::now();
+    // auto startFilter = std::chrono::high_resolution_clock::now();
     // Extract matching rows from the batch
     std::vector<std::vector<int>> selectedCombinations;
     std::unordered_map<std::string, std::vector<unionV>> columnData;
@@ -790,9 +790,9 @@ std::shared_ptr<Table> GPUManager::executeMultipleTableJoin(
                 }
             }
 
-            auto endFilter = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> filterTime = endFilter - startFilter;
-            std::cout << "Filtering matches time: " << filterTime.count() << " ms" << std::endl;
+            // auto endFilter = std::chrono::high_resolution_clock::now();
+            // std::chrono::duration<double, std::milli> filterTime = endFilter - startFilter;
+            // std::cout << "Filtering matches time: " << filterTime.count() << " ms" << std::endl;
 
             // Create result table with appropriate column types
             std::unordered_map<std::string, ColumnType> columnTypes;
@@ -854,9 +854,9 @@ std::shared_ptr<Table> GPUManager::executeMultipleTableJoin(
             }
         }
 
-        auto endFilter = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> filterTime = endFilter - startFilter;
-        std::cout << "Filtering matches time: " << filterTime.count() << " ms" << std::endl;
+        // auto endFilter = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double, std::milli> filterTime = endFilter - startFilter;
+        // std::cout << "Filtering matches time: " << filterTime.count() << " ms" << std::endl;
 
         // Create result table with appropriate column types
         std::unordered_map<std::string, ColumnType> columnTypes;

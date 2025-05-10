@@ -916,7 +916,7 @@ std::unique_ptr<ExecutionPlan> PlanBuilder::build(const hsql::SelectStatement *s
 std::unique_ptr<ExecutionPlan> PlanBuilder::convertDuckDBPlanToExecutionPlan(const hsql::SelectStatement *stmt,
                                                                              std::unique_ptr<duckdb::LogicalOperator> duckdb_plan, int cnt)
 {
-    std::cout << duckdb_plan->ToString() << std::endl;
+    // std::cout << duckdb_plan->ToString() << std::endl;
 
     // Base case for recursion
     if (!duckdb_plan)

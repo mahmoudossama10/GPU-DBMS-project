@@ -610,7 +610,7 @@ std::shared_ptr<Table> QueryExecutor::processBatchedQuery(const hsql::SelectStat
 
         for (const auto &batchName : batchedTables)
         {
-            std::cout << "batch " << index << '\n';
+            // std::cout << "batch " << index << '\n';
             index++;
             // Temporarily replace the table name in the query
 
@@ -659,7 +659,7 @@ std::shared_ptr<Table> QueryExecutor::processBatchedQuery(const hsql::SelectStat
         int index = 1;
         for (const auto &combination : batchCombinations)
         {
-            std::cout << "batch " << index << " from " << batchCombinations.size() << '\n';
+            // std::cout << "batch " << index << " from " << batchCombinations.size() << '\n';
             index++;
             // Create a query for this batch combination
             std::string batchQuery = query;

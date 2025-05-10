@@ -121,7 +121,7 @@ std::shared_ptr<Table> Join::apply(
         totalCombinations *= table->getSize();
     }
 
-    std::cout << "Processing " << totalCombinations << " potential combinations..." << std::endl;
+    // std::cout << "Processing " << totalCombinations << " potential combinations..." << std::endl;
 
     // Process all combinations
     size_t matchCount = 0;
@@ -335,12 +335,12 @@ std::shared_ptr<Table> Join::apply(
 
         // Update progress periodically
         processedCount++;
-        if (processedCount % reportInterval == 0)
-        {
-            std::cout << "Processed " << processedCount << "/" << totalCombinations
-                      << " combinations (" << (processedCount * 100.0 / totalCombinations)
-                      << "%), matches found: " << matchCount << std::endl;
-        }
+        // if (processedCount % reportInterval == 0)
+        // {
+        //     std::cout << "Processed " << processedCount << "/" << totalCombinations
+        //               << " combinations (" << (processedCount * 100.0 / totalCombinations)
+        //               << "%), matches found: " << matchCount << std::endl;
+        // }
 
         // Move to the next combination
         int tableToIncrement = tables.size() - 1;
@@ -367,8 +367,8 @@ std::shared_ptr<Table> Join::apply(
     auto endTime = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> processingTime = endTime - startTime;
 
-    std::cout << "Join completed in " << processingTime.count() << " ms, found "
-              << matchCount << " matching rows." << std::endl;
+    // std::cout << "Join completed in " << processingTime.count() << " ms, found "
+    //           << matchCount << " matching rows." << std::endl;
 
     // Create and return the final joined table
 
